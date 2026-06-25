@@ -8,6 +8,7 @@ class MigrationRunner
     private const PHASE_2 = 'phase_2_gps_borrow';
     private const PHASE_3 = 'phase_3_job_description';
     private const PHASE_4 = 'phase_4_job_title';
+    private const PHASE_5 = 'phase_5_sync_permissions';
 
     public static function ensureLatest(): void
     {
@@ -29,6 +30,10 @@ class MigrationRunner
         if (!self::isApplied($pdo, self::PHASE_4)) {
             self::runPhase4($pdo);
             self::markApplied($pdo, self::PHASE_4);
+        }
+        if (!self::isApplied($pdo, self::PHASE_5)) {
+            self::runPhase5($pdo);
+            self::markApplied($pdo, self::PHASE_5);
         }
     }
 
@@ -498,6 +503,14 @@ class MigrationRunner
                     CONSTRAINT fk_jdp_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             ');
+        }
+    }
+
+    private static function runPhase5(PDO $pdo): void
+    {
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
         }
     }
 }

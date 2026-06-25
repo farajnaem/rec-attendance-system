@@ -176,10 +176,6 @@ try {
 
         $route === '/employee/task/complete' && $method === 'POST' => (function () {
             Auth::requireLogin();
-            if (!Auth::can('manage_daily_tasks')) {
-                flash('error', 'لا يمكنك إتمام المهام.');
-                redirect(RoleHelper::dashboardPath(Auth::role()));
-            }
             if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
                 flash('error', 'انتهت صلاحية النموذج.');
                 redirect('/employee/dashboard');
@@ -188,6 +184,12 @@ try {
             if (!TaskService::canAccess($taskId, Auth::id(), Auth::role())) {
                 flash('error', 'لا يمكنك إتمام هذه المهمة.');
                 redirect(Auth::role() === 'employee' ? '/employee/dashboard' : '/manager/tasks');
+            }
+            $task = TaskService::getById($taskId);
+            $isOwner = $task && (int) $task['employee_id'] === Auth::id();
+            if (!$isOwner && !Auth::can('complete_daily_tasks') && !Auth::can('manage_daily_tasks')) {
+                flash('error', 'لا يمكنك إتمام المهام.');
+                redirect(RoleHelper::dashboardPath(Auth::role()));
             }
             try {
                 $tz = Auth::timezone();
@@ -198,6 +200,35 @@ try {
                 flash('error', $e->getMessage());
             }
             redirect(Auth::role() === 'employee' ? '/employee/dashboard' : '/manager/tasks');
+        })(),
+
+        $route === '/employee/task/create' && $method === 'POST' => (function () {
+            Auth::requireLogin();
+            if (!RoleHelper::isEmployee(Auth::role())) {
+                flash('error', 'هذه الصفحة للموظفين فقط.');
+                redirect('/manager/tasks');
+            }
+            if (!Auth::can('manage_daily_tasks')) {
+                flash('error', 'لا يمكنك إضافة مهام يومية.');
+                redirect('/employee/dashboard');
+            }
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/employee/dashboard');
+            }
+            try {
+                TaskService::create(
+                    Auth::id(),
+                    Auth::id(),
+                    trim($_POST['title'] ?? ''),
+                    trim($_POST['description'] ?? '') ?: null,
+                    $_POST['task_date'] ?? date('Y-m-d')
+                );
+                flash('success', 'تمت إضافة المهمة.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/employee/dashboard#my-tasks');
         })(),
 
         $route === '/employee/report' && $method === 'GET' => (function () {
@@ -218,6 +249,7 @@ try {
 
         $route === '/manager/tasks' && $method === 'GET' => (function () {
             Auth::requireRole(RoleHelper::managementRoles());
+            Auth::requirePermission('manage_daily_tasks');
             $from = $_GET['from'] ?? date('Y-m-d', strtotime('-7 days'));
             $to = $_GET['to'] ?? date('Y-m-d', strtotime('+7 days'));
             $tasks = Auth::role() === 'system_admin'
@@ -239,6 +271,7 @@ try {
 
         $route === '/manager/tasks/create' && $method === 'POST' => (function () {
             Auth::requireRole(RoleHelper::managementRoles());
+            Auth::requirePermission('manage_daily_tasks');
             if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
                 flash('error', 'انتهت صلاحية النموذج.');
                 redirect('/manager/tasks');

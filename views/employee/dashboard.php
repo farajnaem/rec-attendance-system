@@ -148,8 +148,31 @@
     <?php endif; ?>
 </div>
 
-<div class="card">
+<div class="card" id="my-tasks">
     <h2>مهامي اليومية</h2>
+    <?php if (Auth::can('manage_daily_tasks')): ?>
+    <details class="card" style="margin-bottom:1rem;padding:1rem;background:#f8fafc">
+        <summary style="cursor:pointer;font-weight:600">إضافة مهمة جديدة</summary>
+        <form method="post" action="<?= e(url('/employee/task/create')) ?>" style="margin-top:1rem">
+            <?= Csrf::field() ?>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>تاريخ المهمة</label>
+                    <input type="date" name="task_date" class="form-control" value="<?= e(date('Y-m-d')) ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>عنوان المهمة</label>
+                    <input type="text" name="title" class="form-control" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>الوصف (اختياري)</label>
+                <textarea name="description" class="form-control" rows="2"></textarea>
+            </div>
+            <button type="submit" class="btn">إضافة المهمة</button>
+        </form>
+    </details>
+    <?php endif; ?>
     <table>
         <thead>
             <tr><th>التاريخ</th><th>المهمة</th><th>الحالة</th><th>الدرجة</th><th>إجراء</th></tr>
@@ -164,7 +187,7 @@
                 <td><span class="badge badge-<?= e($t['status']) ?>"><?= e(statusLabel($t['status'])) ?></span></td>
                 <td><?= $t['score'] !== null ? e((string)$t['score']) . '/10' : '—' ?></td>
                 <td>
-                    <?php if ($t['status'] === 'pending'): ?>
+                    <?php if ($t['status'] === 'pending' && (Auth::can('complete_daily_tasks') || Auth::can('manage_daily_tasks'))): ?>
                     <button type="button" class="btn btn-success" onclick="openCompleteModal(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')">أتممت العمل</button>
                     <?php else: ?>—<?php endif; ?>
                 </td>

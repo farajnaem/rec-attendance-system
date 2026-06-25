@@ -17,6 +17,10 @@ class PermissionService
             'label' => 'إدارة المهام اليومية (إضافة/تعديل/حذف)',
             'defaults' => ['employee', 'program_supervisor'],
         ],
+        'complete_daily_tasks' => [
+            'label' => 'إتمام المهام اليومية المسندة',
+            'defaults' => ['employee', 'admin_assistant', 'program_supervisor', 'director', 'system_admin'],
+        ],
         'manage_job_description' => [
             'label' => 'إدخال التوصيف الوظيفي (مهام العقد)',
             'defaults' => ['admin_assistant', 'director'],
@@ -92,6 +96,44 @@ class PermissionService
         self::setForUser($userId, self::defaultCodesForRole($role));
     }
 
+    /** يضيف الصلاحيات الافتراضية الناقصة دون حذف ما عُيّن يدوياً */
+    public static function syncMissingDefaults(int $userId, string $role): void
+    {
+        $role = RoleHelper::normalizeRole($role);
+        $defaults = self::defaultCodesForRole($role);
+        $existing = self::codesForUser($userId);
+        $missing = array_diff($defaults, $existing);
+        if ($missing === []) {
+            return;
+        }
+
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare(
+            'INSERT INTO user_permissions (user_id, permission_code, granted) VALUES (?, ?, 1)'
+        );
+        foreach ($missing as $code) {
+            $check = $pdo->prepare(
+                'SELECT granted FROM user_permissions WHERE user_id = ? AND permission_code = ? LIMIT 1'
+            );
+            $check->execute([$userId, $code]);
+            if (!$check->fetch()) {
+                $stmt->execute([$userId, $code]);
+            }
+        }
+    }
+
+    public static function roleHasDefault(string $role, string $code): bool
+    {
+        if (!isset(self::DEFINITIONS[$code])) {
+            return false;
+        }
+        $role = RoleHelper::normalizeRole($role);
+        if ($role === 'system_admin') {
+            return true;
+        }
+        return in_array($role, self::DEFINITIONS[$code]['defaults'], true);
+    }
+
     public static function setForUser(int $userId, array $codes): void
     {
         $pdo = Database::getConnection();
@@ -128,7 +170,18 @@ class PermissionService
         );
         $stmt->execute([$userId, $code]);
         $row = $stmt->fetch();
-        return $row && (int) $row['granted'] === 1;
+        if ($row) {
+            return (int) $row['granted'] === 1;
+        }
+
+        $userStmt = $pdo->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+        $userStmt->execute([$userId]);
+        $user = $userStmt->fetch();
+        if (!$user) {
+            return false;
+        }
+
+        return self::roleHasDefault((string) $user['role'], $code);
     }
 
     public static function label(string $code): string

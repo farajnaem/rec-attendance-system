@@ -23,12 +23,7 @@ class Auth
         $_SESSION['user_role'] = RoleHelper::normalizeRole($user['role']);
         $_SESSION['user_timezone'] = $user['timezone'];
 
-        if (RoleHelper::normalizeRole($user['role']) === 'system_admin') {
-            $perms = PermissionService::codesForUser((int) $user['id']);
-            if ($perms === []) {
-                PermissionService::grantDefaults((int) $user['id'], 'system_admin');
-            }
-        }
+        PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
 
         return true;
     }
