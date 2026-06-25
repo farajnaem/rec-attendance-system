@@ -9,6 +9,7 @@ class MigrationRunner
     private const PHASE_3 = 'phase_3_job_description';
     private const PHASE_4 = 'phase_4_job_title';
     private const PHASE_5 = 'phase_5_sync_permissions';
+    private const PHASE_6 = 'phase_6_audit_security';
 
     public static function ensureLatest(): void
     {
@@ -34,6 +35,10 @@ class MigrationRunner
         if (!self::isApplied($pdo, self::PHASE_5)) {
             self::runPhase5($pdo);
             self::markApplied($pdo, self::PHASE_5);
+        }
+        if (!self::isApplied($pdo, self::PHASE_6)) {
+            self::runPhase6($pdo);
+            self::markApplied($pdo, self::PHASE_6);
         }
     }
 
@@ -511,6 +516,50 @@ class MigrationRunner
         $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
         foreach ($users as $user) {
             PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
+    }
+
+    private static function runPhase6(PDO $pdo): void
+    {
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'sqlite') {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NULL,
+                action TEXT NOT NULL,
+                entity_type TEXT NULL,
+                entity_id INTEGER NULL,
+                details TEXT NULL,
+                ip_address TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS login_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attempt_key TEXT NOT NULL UNIQUE,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                locked_until TEXT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )');
+        } else {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS audit_log (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NULL,
+                action VARCHAR(64) NOT NULL,
+                entity_type VARCHAR(64) NULL,
+                entity_id INT UNSIGNED NULL,
+                details JSON NULL,
+                ip_address VARCHAR(45) NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_audit_created (created_at),
+                CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS login_attempts (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                attempt_key VARCHAR(190) NOT NULL UNIQUE,
+                attempts INT UNSIGNED NOT NULL DEFAULT 0,
+                locked_until DATETIME NULL,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
         }
     }
 }

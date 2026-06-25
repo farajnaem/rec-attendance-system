@@ -28,7 +28,10 @@ $months = [1=>'يناير',2=>'فبراير',3=>'مارس',4=>'أبريل',5=>'�
         </select>
     </div>
     <div><button type="submit" class="btn">عرض التقرير</button>
-    <?php if ($report): ?><button type="button" class="btn btn-outline" onclick="window.print()">طباعة</button><?php endif; ?>
+    <?php if ($report): ?>
+    <button type="button" class="btn btn-outline" onclick="window.print()">طباعة</button>
+    <a href="<?= e(url('/manager/reports/export?employee_id=' . (int) $employeeId . '&year=' . (int) $year . '&month=' . (int) $month)) ?>" class="btn btn-outline">تصدير CSV</a>
+    <?php endif; ?>
     </div>
 </form>
 
@@ -48,6 +51,25 @@ $months = [1=>'يناير',2=>'فبراير',3=>'مارس',4=>'أبريل',5=>'�
 <div class="card">
     <h3>ملخص الحضور</h3>
     <p>أيام حضور كامل: <?= (int)$report['attendance']['full_days'] ?> من <?= (int)$report['attendance']['expected_workdays'] ?> يوم عمل</p>
+</div>
+
+<div class="card">
+    <h3>سجل الحضور اليومي</h3>
+    <table>
+        <thead><tr><th>التاريخ</th><th>إجازة</th><th>حضور</th><th>انصراف</th><th>كامل</th><th>متأخر</th></tr></thead>
+        <tbody>
+        <?php foreach ($report['attendance']['daily'] as $d): if (!$d['is_workday']) continue; ?>
+        <tr>
+            <td><?= e($d['date']) ?></td>
+            <td><?= $d['on_leave'] ? 'نعم' : '—' ?></td>
+            <td><?= $d['check_in'] ? '✓' : '—' ?></td>
+            <td><?= $d['check_out'] ? '✓' : '—' ?></td>
+            <td><?= $d['complete'] ? '✓' : '✗' ?></td>
+            <td><?= $d['late'] ? 'نعم' : '—' ?></td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
 </div>
 
 <div class="card">

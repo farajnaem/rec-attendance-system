@@ -7,8 +7,28 @@
 </div>
 <div class="stats">
     <div class="stat-box">
-        <div class="value"><?= count($team) ?></div>
+        <div class="value"><?= (int) ($stats['total_employees'] ?? count($team)) ?></div>
         <div class="label">عدد الموظفين في نطاقك</div>
+    </div>
+    <div class="stat-box">
+        <div class="value"><?= (int) ($stats['present_today'] ?? 0) ?></div>
+        <div class="label">حاضرون اليوم</div>
+    </div>
+    <div class="stat-box">
+        <div class="value"><?= (int) ($stats['absent_today'] ?? 0) ?></div>
+        <div class="label">غائبون اليوم</div>
+    </div>
+    <div class="stat-box">
+        <div class="value"><?= (int) ($stats['complete_today'] ?? 0) ?></div>
+        <div class="label">حضور كامل اليوم</div>
+    </div>
+    <div class="stat-box">
+        <div class="value"><?= (int) ($stats['late_today'] ?? 0) ?></div>
+        <div class="label">متأخرون اليوم</div>
+    </div>
+    <div class="stat-box">
+        <div class="value"><?= (int) ($stats['pending_tasks'] ?? 0) ?></div>
+        <div class="label">مهام معلّقة</div>
     </div>
 </div>
 
@@ -73,6 +93,12 @@
         <p class="text-muted">إضافة مهام يومية ومتابعة إتمامها</p>
     </a>
     <?php endif; ?>
+    <?php if (!RoleHelper::isEmployee(Auth::role())): ?>
+    <a href="<?= e(url('/manager/leaves')) ?>" class="card link-card">
+        <h3>الإجازات</h3>
+        <p class="text-muted">مراجعة طلبات الإجازة</p>
+    </a>
+    <?php endif; ?>
     <?php if (Auth::can('view_reports_readonly') || Auth::can('monthly_employee_report')): ?>
     <a href="<?= e(url('/manager/reports')) ?>" class="card link-card">
         <h3>التقارير الشهرية</h3>
@@ -88,6 +114,10 @@
         <p class="text-muted">تسجيل الحضور ومهامي اليومية</p>
     </a>
     <?php if (RoleHelper::isSystemAdmin(Auth::role())): ?>
+    <a href="<?= e(url('/manager/audit')) ?>" class="card link-card">
+        <h3>سجل التدقيق</h3>
+        <p class="text-muted">مراجعة عمليات النظام</p>
+    </a>
     <a href="<?= e(url('/manager/database')) ?>" class="card link-card">
         <h3>نسخ احتياطي واستيراد</h3>
         <p class="text-muted">تصدير واستيراد قاعدة البيانات (JSON)</p>

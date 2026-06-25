@@ -68,8 +68,8 @@ class UserService
         $email = trim(strtolower($email));
         $role = RoleHelper::normalizeRole($role);
 
-        if ($name === '' || $email === '' || strlen($password) < 6) {
-            throw new InvalidArgumentException('يرجى تعبئة جميع الحقول. كلمة المرور 6 أحرف على الأقل.');
+        if ($name === '' || $email === '' || strlen($password) < passwordMinLength()) {
+            throw new InvalidArgumentException('يرجى تعبئة جميع الحقول. كلمة المرور ' . passwordMinLength() . ' أحرف على الأقل.');
         }
         if (!RoleHelper::isValid($role)) {
             throw new InvalidArgumentException('الدور غير صالح.');
@@ -89,29 +89,37 @@ class UserService
         }
 
         $hash = password_hash($password, PASSWORD_BCRYPT);
-        $stmt = $pdo->prepare(
-            'INSERT INTO users (name, email, password_hash, role, timezone, manager_id)
-             VALUES (?, ?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([
-            $name,
-            $email,
-            $hash,
-            $role,
-            $timezone,
-            $role === 'employee' ? $managerId : null,
-        ]);
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'INSERT INTO users (name, email, password_hash, role, timezone, manager_id)
+                 VALUES (?, ?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([
+                $name,
+                $email,
+                $hash,
+                $role,
+                $timezone,
+                $role === 'employee' ? $managerId : null,
+            ]);
 
-        $userId = (int) $pdo->lastInsertId();
+            $userId = (int) $pdo->lastInsertId();
 
-        if ($departmentId) {
-            DepartmentService::assignUser($userId, $departmentId, Auth::id() ?: $userId);
-        }
+            if ($departmentId) {
+                DepartmentService::assignUser($userId, $departmentId, Auth::id() ?: $userId);
+            }
 
-        if ($permissions !== null) {
-            PermissionService::setForUser($userId, $permissions);
-        } else {
-            PermissionService::grantDefaults($userId, $role);
+            if ($permissions !== null) {
+                PermissionService::setForUser($userId, $permissions);
+            } else {
+                PermissionService::grantDefaults($userId, $role);
+            }
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
         }
 
         return $userId;
@@ -166,8 +174,8 @@ class UserService
         $managerId = $role === 'employee' ? $managerId : null;
 
         if ($newPassword !== null && $newPassword !== '') {
-            if (strlen($newPassword) < 6) {
-                throw new InvalidArgumentException('كلمة المرور 6 أحرف على الأقل.');
+            if (strlen($newPassword) < passwordMinLength()) {
+                throw new InvalidArgumentException('كلمة المرور ' . passwordMinLength() . ' أحرف على الأقل.');
             }
             $hash = password_hash($newPassword, PASSWORD_BCRYPT);
             $pdo->prepare(
@@ -215,7 +223,26 @@ class UserService
         if (!PermissionService::can($actorId, 'transfer_employee') && !RoleHelper::isOrgAdmin($actorRole)) {
             throw new RuntimeException('لا يمكنك نقل الموظف بين الدوائر.');
         }
+        if (!ScopeService::canViewUser($actorId, $actorRole, $userId)) {
+            throw new RuntimeException('لا يمكنك نقل هذا الموظف.');
+        }
         DepartmentService::transferUser($userId, $departmentId, $actorId);
+    }
+
+    public static function changePassword(int $userId, string $current, string $new): void
+    {
+        $user = self::getById($userId);
+        if (!$user || !password_verify($current, (string) $user['password_hash'])) {
+            throw new RuntimeException('كلمة المرور الحالية غير صحيحة.');
+        }
+        if (strlen($new) < passwordMinLength()) {
+            throw new InvalidArgumentException('كلمة المرور الجديدة يجب أن تكون ' . passwordMinLength() . ' أحرف على الأقل.');
+        }
+
+        $pdo = Database::getConnection();
+        $hash = password_hash($new, PASSWORD_BCRYPT);
+        $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([$hash, $userId]);
+        AuditService::log('password.change', 'user', $userId);
     }
 
     public static function toggleActive(int $userId, int $actorId, string $actorRole): void

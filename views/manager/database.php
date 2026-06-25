@@ -32,9 +32,14 @@
         </table>
         <?php endif; ?>
 
-        <a href="<?= e(url('/manager/database/export')) ?>" class="btn btn-success">
-            تنزيل ملف JSON
-        </a>
+        <form method="post" action="<?= e(url('/manager/database/export')) ?>" style="margin-top:1rem">
+            <?= Csrf::field() ?>
+            <div class="form-group">
+                <label for="export_admin_password">كلمة مرور المسؤول *</label>
+                <input type="password" id="export_admin_password" name="admin_password" class="form-control" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-success">تنزيل ملف JSON</button>
+        </form>
     </div>
 
     <div class="card">
@@ -45,6 +50,11 @@
 
         <form method="post" action="<?= e(url('/manager/database/import')) ?>" enctype="multipart/form-data">
             <?= Csrf::field() ?>
+
+            <div class="form-group">
+                <label for="import_admin_password">كلمة مرور المسؤول *</label>
+                <input type="password" id="import_admin_password" name="admin_password" class="form-control" required autocomplete="current-password">
+            </div>
 
             <div class="form-group">
                 <label for="import_file">ملف JSON *</label>

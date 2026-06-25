@@ -25,6 +25,10 @@ $navActive = static function (string ...$paths) use ($route): string {
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span>
         <span>تقريري الشهري</span>
     </a>
+    <a class="rd-nav-link" href="<?= e(url('/employee/dashboard')) ?>#leaves">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+        <span>الإجازات</span>
+    </a>
     <a class="rd-nav-link" href="<?= e(url('/employee/dashboard')) ?>#job-description">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></span>
         <span>التوصيف الوظيفي</span>
@@ -82,10 +86,18 @@ $navActive = static function (string ...$paths) use ($route): string {
         <span>حضور الفريق</span>
     </a>
     <?php endif; ?>
+    <a class="rd-nav-link<?= $navActive('/manager/leaves') ?>" href="<?= e(url('/manager/leaves')) ?>">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg></span>
+        <span>الإجازات</span>
+    </a>
     <?php endif; ?>
 
     <?php if (RoleHelper::isSystemAdmin(Auth::role())): ?>
     <div class="rd-nav-section">النظام</div>
+    <a class="rd-nav-link<?= $navActive('/manager/audit') ?>" href="<?= e(url('/manager/audit')) ?>">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
+        <span>سجل التدقيق</span>
+    </a>
     <a class="rd-nav-link<?= $navActive('/manager/database') ?>" href="<?= e(url('/manager/database')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
         <span>نسخ احتياطي</span>

@@ -142,4 +142,132 @@ class AttendanceService
         $stmt->execute($params);
         return $stmt->fetchAll();
     }
+
+    public static function manualRecord(
+        int $userId,
+        string $type,
+        string $localDate,
+        string $reason,
+        int $actorId
+    ): void {
+        if (!in_array($type, ['check_in', 'check_out'], true)) {
+            throw new InvalidArgumentException('نوع التسجيل غير صالح.');
+        }
+        if ($localDate === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $localDate)) {
+            throw new InvalidArgumentException('تاريخ غير صالح.');
+        }
+        if (trim($reason) === '') {
+            throw new InvalidArgumentException('سبب التصحيح مطلوب.');
+        }
+
+        $user = UserService::getById($userId);
+        if (!$user) {
+            throw new RuntimeException('المستخدم غير موجود.');
+        }
+        $timezone = $user['timezone'] ?? TimezoneHelper::defaultTimezone();
+
+        $pdo = Database::getConnection();
+        $existing = $pdo->prepare(
+            'SELECT id FROM attendance_records WHERE user_id = ? AND local_work_date = ? AND type = ?'
+        );
+        $existing->execute([$userId, $localDate, $type]);
+        if ($existing->fetch()) {
+            throw new RuntimeException('يوجد سجل مسبق لهذا اليوم والنوع.');
+        }
+
+        if ($type === 'check_out') {
+            $in = $pdo->prepare(
+                'SELECT id FROM attendance_records WHERE user_id = ? AND local_work_date = ? AND type = ?'
+            );
+            $in->execute([$userId, $localDate, 'check_in']);
+            if (!$in->fetch()) {
+                throw new RuntimeException('يجب وجود سجل حضور قبل تسجيل الانصراف.');
+            }
+        }
+
+        $utcNow = TimezoneHelper::utcNow();
+        $signatureData = 'MANUAL:' . trim($reason);
+        $ipNote = 'manual by #' . $actorId;
+
+        $columns = ['user_id', 'type', 'signed_at_utc', 'local_work_date', 'timezone', 'signature_data', 'ip_address'];
+        $values = [$userId, $type, $utcNow->format('Y-m-d H:i:s'), $localDate, $timezone, $signatureData, $ipNote];
+
+        if (self::columnExists($pdo, 'notes')) {
+            $columns[] = 'notes';
+            $values[] = trim($reason);
+        }
+
+        $placeholders = implode(',', array_fill(0, count($values), '?'));
+        $colList = implode(',', $columns);
+        $pdo->prepare("INSERT INTO attendance_records ($colList) VALUES ($placeholders)")->execute($values);
+    }
+
+    public static function getRecord(int $id): ?array
+    {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare(
+            'SELECT a.*, u.name AS user_name, u.email AS user_email, u.timezone AS user_timezone
+             FROM attendance_records a
+             JOIN users u ON u.id = a.user_id
+             WHERE a.id = ? LIMIT 1'
+        );
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public static function teamRecordsForActor(
+        int $actorId,
+        string $actorRole,
+        string $from,
+        string $to
+    ): array {
+        $staff = ScopeService::visibleStaff($actorId, $actorRole);
+        if (empty($staff)) {
+            return [];
+        }
+        $ids = array_column($staff, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $pdo = Database::getConnection();
+        $params = array_merge($ids, [$from, $to]);
+        $stmt = $pdo->prepare(
+            "SELECT a.*, u.name AS user_name, u.timezone AS user_timezone
+             FROM attendance_records a
+             JOIN users u ON u.id = a.user_id
+             WHERE a.user_id IN ($placeholders) AND a.local_work_date BETWEEN ? AND ?
+             ORDER BY a.local_work_date DESC, a.signed_at_utc DESC"
+        );
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    private static function columnExists(PDO $pdo, string $column): bool
+    {
+        static $cache = [];
+        $key = 'attendance_records.' . $column;
+        if (isset($cache[$key])) {
+            return $cache[$key];
+        }
+
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'sqlite') {
+            $cols = $pdo->query('PRAGMA table_info(attendance_records)')->fetchAll();
+            foreach ($cols as $col) {
+                if (($col['name'] ?? '') === $column) {
+                    return $cache[$key] = true;
+                }
+            }
+            return $cache[$key] = false;
+        }
+
+        $stmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+        );
+        $stmt->execute(['attendance_records', $column]);
+
+        return $cache[$key] = (int) $stmt->fetchColumn() > 0;
+    }
 }

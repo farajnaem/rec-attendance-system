@@ -19,4 +19,9 @@ class LeaveHelper
     {
         return isset(self::TYPES[$type]);
     }
+
+    public static function types(): array
+    {
+        return self::TYPES;
+    }
 }

@@ -17,7 +17,7 @@
             </div>
             <div class="form-group">
                 <label>كلمة المرور</label>
-                <input type="password" name="password" class="form-control" minlength="6" required>
+                <input type="password" name="password" class="form-control" minlength="<?= passwordMinLength() ?>" required>
             </div>
             <div class="form-group">
                 <label>الوصف الوظيفي (الدور)</label>
@@ -79,7 +79,11 @@
 
 <div class="card">
     <h2>قائمة المستخدمين</h2>
-    <table>
+    <div class="form-group" style="max-width:320px;margin-bottom:1rem">
+        <label for="userSearch">بحث</label>
+        <input type="search" id="userSearch" class="form-control" placeholder="ابحث بالاسم أو البريد..." autocomplete="off">
+    </div>
+    <table id="usersTable">
         <thead>
             <tr>
                 <th>الاسم</th>
@@ -93,10 +97,10 @@
             </tr>
         </thead>
         <tbody>
-        <?php if (empty($users)): ?>
+        <?php if (empty($pagination['items'])): ?>
             <tr><td colspan="8">لا يوجد مستخدمون</td></tr>
-        <?php else: foreach ($users as $u): ?>
-            <tr>
+        <?php else: foreach ($pagination['items'] as $u): ?>
+            <tr data-search="<?= e(mb_strtolower($u['name'] . ' ' . $u['email'])) ?>">
                 <td>
                     <a href="<?= e(url('/manager/users/edit?id=' . (int)$u['id'])) ?>" class="fw-bold" style="color:var(--primary);text-decoration:none">
                         <?= e($u['name']) ?>
@@ -143,6 +147,17 @@
         <?php endforeach; endif; ?>
         </tbody>
     </table>
+    <?php if (($pagination['pages'] ?? 1) > 1): ?>
+    <nav class="pagination" style="margin-top:1rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+        <?php if ($pagination['page'] > 1): ?>
+        <a href="<?= e(url('/manager/users?page=' . ($pagination['page'] - 1))) ?>" class="btn btn-outline">السابق</a>
+        <?php endif; ?>
+        <span class="text-muted">صفحة <?= (int) $pagination['page'] ?> من <?= (int) $pagination['pages'] ?> (<?= (int) $pagination['total'] ?> مستخدم)</span>
+        <?php if ($pagination['page'] < $pagination['pages']): ?>
+        <a href="<?= e(url('/manager/users?page=' . ($pagination['page'] + 1))) ?>" class="btn btn-outline">التالي</a>
+        <?php endif; ?>
+    </nav>
+    <?php endif; ?>
 </div>
 
 <script>
@@ -151,4 +166,17 @@ function toggleUserFields() {
     document.getElementById('managerField').style.display = role === 'employee' ? 'block' : 'none';
 }
 toggleUserFields();
+
+(function () {
+    var input = document.getElementById('userSearch');
+    var table = document.getElementById('usersTable');
+    if (!input || !table) return;
+    input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase();
+        table.querySelectorAll('tbody tr[data-search]').forEach(function (row) {
+            var hay = row.getAttribute('data-search') || '';
+            row.style.display = q === '' || hay.indexOf(q) !== -1 ? '' : 'none';
+        });
+    });
+})();
 </script>

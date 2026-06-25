@@ -96,7 +96,7 @@ class PermissionService
         self::setForUser($userId, self::defaultCodesForRole($role));
     }
 
-    /** يضيف الصلاحيات الافتراضية الناقصة دون حذف ما عُيّن يدوياً */
+    /** يضيف الصلاحيات الافتراضية الناقصة عند إنشاء المستخدم فقط — لا يُستدعى عند تسجيل الدخول */
     public static function syncMissingDefaults(int $userId, string $role): void
     {
         $role = RoleHelper::normalizeRole($role);
@@ -134,6 +134,35 @@ class PermissionService
         return in_array($role, self::DEFINITIONS[$code]['defaults'], true);
     }
 
+    public static function loadPermissionsToSession(int $userId, string $role): void
+    {
+        $_SESSION['permissions'] = self::effectiveCodesForUser($userId, $role);
+    }
+
+    public static function effectiveCodesForUser(int $userId, string $role): array
+    {
+        $role = RoleHelper::normalizeRole($role);
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare(
+            'SELECT permission_code, granted FROM user_permissions WHERE user_id = ?'
+        );
+        $stmt->execute([$userId]);
+        $rows = $stmt->fetchAll();
+
+        if ($rows !== []) {
+            $codes = [];
+            foreach ($rows as $row) {
+                if ((int) $row['granted'] === 1) {
+                    $codes[] = (string) $row['permission_code'];
+                }
+            }
+
+            return array_values(array_unique($codes));
+        }
+
+        return self::defaultCodesForRole($role);
+    }
+
     public static function setForUser(int $userId, array $codes): void
     {
         $pdo = Database::getConnection();
@@ -146,6 +175,13 @@ class PermissionService
             if (in_array($code, $valid, true)) {
                 $stmt->execute([$userId, $code]);
             }
+        }
+
+        $userStmt = $pdo->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+        $userStmt->execute([$userId]);
+        $user = $userStmt->fetch();
+        if ($user) {
+            self::loadPermissionsToSession($userId, (string) $user['role']);
         }
     }
 
@@ -164,6 +200,11 @@ class PermissionService
         if (!isset(self::DEFINITIONS[$code])) {
             return false;
         }
+
+        if (isset($_SESSION['user_id']) && (int) $_SESSION['user_id'] === $userId && isset($_SESSION['permissions'])) {
+            return in_array($code, $_SESSION['permissions'], true);
+        }
+
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             'SELECT granted FROM user_permissions WHERE user_id = ? AND permission_code = ? LIMIT 1'

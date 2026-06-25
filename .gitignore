@@ -6,6 +6,10 @@ public/database/
 php.local.ini
 .env
 
+# تخزين التطبيق
+storage/*
+!storage/.gitkeep
+
 # نظام
 .DS_Store
 Thumbs.db

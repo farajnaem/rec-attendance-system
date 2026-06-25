@@ -11,7 +11,12 @@ class TaskService
             'INSERT INTO daily_tasks (employee_id, assigned_by, title, description, task_date) VALUES (?, ?, ?, ?, ?)'
         );
         $stmt->execute([$employeeId, $assignedBy, $title, $description, $taskDate]);
-        return (int) $pdo->lastInsertId();
+        $id = (int) $pdo->lastInsertId();
+        if ($assignedBy !== $employeeId) {
+            NotificationService::taskAssigned($employeeId, $title);
+        }
+
+        return $id;
     }
 
     public static function getById(int $taskId): ?array

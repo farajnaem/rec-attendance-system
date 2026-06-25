@@ -6,16 +6,7 @@ class ReportService
 {
     public static function workingDaysInMonth(int $year, int $month): int
     {
-        $days = 0;
-        $start = new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month));
-        $end = $start->modify('last day of this month');
-        for ($d = $start; $d <= $end; $d = $d->modify('+1 day')) {
-            $dow = (int) $d->format('N');
-            if ($dow >= 1 && $dow <= 5) {
-                $days++;
-            }
-        }
-        return $days;
+        return WorkScheduleService::workingDaysInMonth($year, $month);
     }
 
     public static function monthRange(int $year, int $month): array
@@ -31,15 +22,20 @@ class ReportService
         $pdo = Database::getConnection();
 
         $stmt = $pdo->prepare(
-            'SELECT local_work_date, type FROM attendance_records
+            'SELECT local_work_date, type, signed_at_utc, timezone FROM attendance_records
              WHERE user_id = ? AND local_work_date BETWEEN ? AND ?'
         );
         $stmt->execute([$userId, $start, $end]);
         $rows = $stmt->fetchAll();
 
         $byDate = [];
+        $lateByDate = [];
         foreach ($rows as $row) {
-            $byDate[$row['local_work_date']][$row['type']] = true;
+            $byDate[$row['local_work_date']][$row['type']] = $row;
+            if ($row['type'] === 'check_in') {
+                $localDt = TimezoneHelper::toLocal($row['signed_at_utc'], $row['timezone'])->format('Y-m-d H:i:s');
+                $lateByDate[$row['local_work_date']] = WorkScheduleService::isLateCheckIn($localDt);
+            }
         }
 
         $daily = [];
@@ -48,22 +44,24 @@ class ReportService
         $last = new DateTimeImmutable($end);
         while ($cursor <= $last) {
             $date = $cursor->format('Y-m-d');
-            $dow = (int) $cursor->format('N');
-            $isWorkday = $dow >= 1 && $dow <= 5;
+            $isWorkday = WorkScheduleService::isWorkDay($cursor);
+            $onLeave = LeaveService::isOnLeave($userId, $date);
             $hasIn = isset($byDate[$date]['check_in']);
             $hasOut = isset($byDate[$date]['check_out']);
             $complete = $hasIn && $hasOut;
 
-            if ($isWorkday && $complete) {
+            if ($isWorkday && !$onLeave && $complete) {
                 $fullDays++;
             }
 
             $daily[] = [
                 'date' => $date,
                 'is_workday' => $isWorkday,
+                'on_leave' => $onLeave,
                 'check_in' => $hasIn,
                 'check_out' => $hasOut,
                 'complete' => $complete,
+                'late' => $hasIn && ($lateByDate[$date] ?? false),
             ];
             $cursor = $cursor->modify('+1 day');
         }
@@ -118,6 +116,64 @@ class ReportService
             'month' => $month,
             'attendance' => self::attendanceReport($userId, $year, $month),
             'performance' => self::performanceReport($userId, $year, $month),
+        ];
+    }
+
+    public static function dashboardStats(int $actorId, string $actorRole, string $date): array
+    {
+        $staff = ScopeService::visibleStaff($actorId, $actorRole);
+        $total = count($staff);
+        $present = 0;
+        $complete = 0;
+        $late = 0;
+        $pdo = Database::getConnection();
+
+        foreach ($staff as $member) {
+            $uid = (int) $member['id'];
+            if (LeaveService::isOnLeave($uid, $date)) {
+                continue;
+            }
+            $stmt = $pdo->prepare(
+                'SELECT type, signed_at_utc, timezone FROM attendance_records
+                 WHERE user_id = ? AND local_work_date = ?'
+            );
+            $stmt->execute([$uid, $date]);
+            $records = $stmt->fetchAll();
+            $hasIn = false;
+            foreach ($records as $r) {
+                if ($r['type'] === 'check_in') {
+                    $hasIn = true;
+                    $localDt = TimezoneHelper::toLocal($r['signed_at_utc'], $r['timezone'])->format('Y-m-d H:i:s');
+                    if (WorkScheduleService::isLateCheckIn($localDt)) {
+                        $late++;
+                    }
+                }
+            }
+            if ($hasIn) {
+                $present++;
+            }
+            $hasOut = false;
+            foreach ($records as $r) {
+                if ($r['type'] === 'check_out') {
+                    $hasOut = true;
+                }
+            }
+            if ($hasIn && $hasOut) {
+                $complete++;
+            }
+        }
+
+        $pendingTasks = (int) $pdo->query(
+            "SELECT COUNT(*) FROM daily_tasks WHERE status = 'pending'"
+        )->fetchColumn();
+
+        return [
+            'total_employees' => $total,
+            'present_today' => $present,
+            'absent_today' => max(0, $total - $present),
+            'complete_today' => $complete,
+            'late_today' => $late,
+            'pending_tasks' => $pendingTasks,
         ];
     }
 }

@@ -23,16 +23,20 @@ if ($config['app']['debug'] ?? false) {
     error_reporting(E_ALL);
 }
 
+require dirname(__DIR__) . '/src/bootstrap.php';
+rec_load_core();
+
+if (rec_is_installed() && !($config['app']['setup_enabled'] ?? false)) {
+    http_response_code(403);
+    exit('النظام مُثبَّت مسبقاً. صفحة الإعداد معطّلة.');
+}
+
 if (!($config['app']['setup_enabled'] ?? false)) {
     http_response_code(403);
     exit('صفحة الإعداد معطّلة. فعّل SETUP_ENABLED=true لإنشاء حساب المسؤول الأول.');
 }
 
-require dirname(__DIR__) . '/src/Database.php';
-require dirname(__DIR__) . '/src/PermissionService.php';
-require dirname(__DIR__) . '/src/MigrationRunner.php';
-require dirname(__DIR__) . '/src/RoleHelper.php';
-require dirname(__DIR__) . '/src/DbDiagnostics.php';
+require dirname(__DIR__) . '/src/Csrf.php';
 
 $error = null;
 $success = null;
@@ -44,7 +48,9 @@ if (!empty($_SESSION['flash']['error'])) {
 
 try {
     $pdo = Database::getConnection();
-    MigrationRunner::ensureLatest();
+    if (envBool('RUN_MIGRATIONS_ON_REQUEST', false)) {
+        MigrationRunner::ensureLatest();
+    }
     $pdo->query('SELECT 1 FROM users LIMIT 1');
 } catch (Throwable $e) {
     $error = 'تعذّر الاتصال بقاعدة البيانات. تأكد من DATABASE_URL أو متغيرات DB_*.';
@@ -59,20 +65,25 @@ if (!$error) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error && $userCount === 0) {
-    $name = trim($_POST['name'] ?? '');
-    $email = trim(strtolower($_POST['email'] ?? ''));
-    $password = $_POST['password'] ?? '';
-
-    if ($name === '' || $email === '' || strlen($password) < 8) {
-        $error = 'يرجى تعبئة جميع الحقول. كلمة المرور 8 أحرف على الأقل.';
+    if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+        $error = 'انتهت صلاحية النموذج. أعد المحاولة.';
     } else {
-        $hash = password_hash($password, PASSWORD_BCRYPT);
-        $pdo->prepare(
-            'INSERT INTO users (name, email, password_hash, role, timezone) VALUES (?, ?, ?, ?, ?)'
-        )->execute([$name, $email, $hash, 'system_admin', $config['app']['default_timezone'] ?? 'Asia/Riyadh']);
-        $adminId = (int) $pdo->lastInsertId();
-        PermissionService::grantDefaults($adminId, 'system_admin');
-        $success = true;
+        $name = trim($_POST['name'] ?? '');
+        $email = trim(strtolower($_POST['email'] ?? ''));
+        $password = $_POST['password'] ?? '';
+
+        if ($name === '' || $email === '' || strlen($password) < passwordMinLength()) {
+            $error = 'يرجى تعبئة جميع الحقول. كلمة المرور ' . passwordMinLength() . ' أحرف على الأقل.';
+        } else {
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            $pdo->prepare(
+                'INSERT INTO users (name, email, password_hash, role, timezone) VALUES (?, ?, ?, ?, ?)'
+            )->execute([$name, $email, $hash, 'system_admin', $config['app']['default_timezone'] ?? 'Asia/Riyadh']);
+            $adminId = (int) $pdo->lastInsertId();
+            PermissionService::grantDefaults($adminId, 'system_admin');
+            rec_mark_installed();
+            $success = true;
+        }
     }
 }
 
@@ -130,6 +141,7 @@ $appName = htmlspecialchars($config['app']['name'] ?? 'REC', ENT_QUOTES, 'UTF-8'
             <a href="<?= htmlspecialchars($loginUrl) ?>" class="btn btn-login" style="display:block;text-align:center;text-decoration:none">تسجيل الدخول</a>
         <?php else: ?>
             <form method="post" class="login-form">
+                <?= Csrf::field() ?>
                 <div class="form-group">
                     <label>اسم مسؤول النظام</label>
                     <input type="text" name="name" class="form-control" required>
@@ -139,9 +151,9 @@ $appName = htmlspecialchars($config['app']['name'] ?? 'REC', ENT_QUOTES, 'UTF-8'
                     <input type="email" name="email" class="form-control" required>
                 </div>
                 <div class="form-group">
-                    <label>كلمة المرور (8 أحرف على الأقل)</label>
+                    <label>كلمة المرور (<?= passwordMinLength() ?> أحرف على الأقل)</label>
                     <div class="password-field">
-                        <input type="password" name="password" class="form-control" minlength="8" required data-password-input>
+                        <input type="password" name="password" class="form-control" minlength="<?= passwordMinLength() ?>" required data-password-input>
                         <button type="button" class="password-field__toggle" data-password-toggle aria-label="إظهار كلمة المرور">👁</button>
                     </div>
                 </div>

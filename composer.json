@@ -1,0 +1,17 @@
+{
+    "name": "rec/attendance-system",
+    "description": "REC employee attendance and task management system",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Rec\\": "src/"
+        }
+    },
+    "scripts": {
+        "test": "php tests/run.php"
+    }
+}

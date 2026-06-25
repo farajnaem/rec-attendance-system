@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/src/Database.php';
-require dirname(__DIR__) . '/src/MigrationRunner.php';
+require dirname(__DIR__) . '/src/bootstrap.php';
+rec_load_core();
 
 try {
     $pdo = Database::getConnection();
 } catch (Throwable $e) {
     fwrite(STDERR, 'Cannot connect to database: ' . $e->getMessage() . PHP_EOL);
-    exit(0);
+    exit(1);
 }
 
 try {
@@ -24,13 +24,13 @@ try {
 $schemaPath = dirname(__DIR__) . '/database/schema.sql';
 if (!is_file($schemaPath)) {
     fwrite(STDERR, "schema.sql not found.\n");
-    exit(0);
+    exit(1);
 }
 
 $sql = file_get_contents($schemaPath);
 if ($sql === false) {
     fwrite(STDERR, "Could not read schema.sql.\n");
-    exit(0);
+    exit(1);
 }
 
 $sql = preg_replace('/--.*$/m', '', $sql);
@@ -43,9 +43,17 @@ foreach ($statements as $statement) {
     try {
         $pdo->exec($statement);
     } catch (Throwable $e) {
-        fwrite(STDERR, 'Schema statement skipped: ' . $e->getMessage() . PHP_EOL);
+        fwrite(STDERR, 'Schema statement failed: ' . $e->getMessage() . PHP_EOL);
+        exit(1);
     }
 }
 
-MigrationRunner::ensureLatest();
+try {
+    MigrationRunner::ensureLatest();
+} catch (Throwable $e) {
+    fwrite(STDERR, 'Migration failed: ' . $e->getMessage() . PHP_EOL);
+    exit(1);
+}
+
 echo "Database schema applied successfully.\n";
+exit(0);

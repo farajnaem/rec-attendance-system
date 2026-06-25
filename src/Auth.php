@@ -23,13 +23,53 @@ class Auth
         $_SESSION['user_role'] = RoleHelper::normalizeRole($user['role']);
         $_SESSION['user_timezone'] = $user['timezone'];
 
-        PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        PermissionService::loadPermissionsToSession((int) $user['id'], (string) $user['role']);
+
+        AuditService::log('login', 'user', (int) $user['id']);
 
         return true;
     }
 
+    public static function refreshSessionUser(): bool
+    {
+        if (!isset($_SESSION['user_id'])) {
+            return false;
+        }
+
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([(int) $_SESSION['user_id']]);
+        $user = $stmt->fetch();
+
+        if (!$user || !(int) $user['is_active']) {
+            self::logout();
+            return false;
+        }
+
+        $_SESSION['user_name'] = $user['name'];
+        $_SESSION['user_email'] = $user['email'];
+        $_SESSION['user_role'] = RoleHelper::normalizeRole((string) $user['role']);
+        $_SESSION['user_timezone'] = $user['timezone'];
+        PermissionService::loadPermissionsToSession((int) $user['id'], (string) $user['role']);
+
+        return true;
+    }
+
+    public static function verifyPassword(string $password): bool
+    {
+        $user = self::user();
+        if (!$user) {
+            return false;
+        }
+
+        return password_verify($password, (string) $user['password_hash']);
+    }
+
     public static function logout(): void
     {
+        if (self::check()) {
+            AuditService::log('logout', 'user', self::id());
+        }
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
@@ -71,7 +111,7 @@ class Auth
 
     public static function requireLogin(): void
     {
-        if (!self::check()) {
+        if (!self::check() || !self::refreshSessionUser()) {
             redirect('/login');
         }
     }
@@ -98,7 +138,14 @@ class Auth
 
     public static function can(string $code): bool
     {
-        return self::check() && PermissionService::can(self::id(), $code);
+        if (!self::check()) {
+            return false;
+        }
+        if (isset($_SESSION['permissions']) && is_array($_SESSION['permissions'])) {
+            return in_array($code, $_SESSION['permissions'], true);
+        }
+
+        return PermissionService::can(self::id(), $code);
     }
 
     public static function user(): ?array
@@ -121,6 +168,11 @@ class Auth
 
     public static function needsSetup(): bool
     {
+        $lock = dirname(__DIR__) . '/storage/installed.lock';
+        if (is_file($lock)) {
+            return false;
+        }
+
         return self::userCount() === 0 && (bool) config('app.setup_enabled', false);
     }
 }

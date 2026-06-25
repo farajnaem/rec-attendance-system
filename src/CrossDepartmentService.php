@@ -56,7 +56,7 @@ class CrossDepartmentService
         return (int) $pdo->lastInsertId();
     }
 
-    public static function end(int $assignmentId, int $actorId): void
+    public static function end(int $assignmentId, int $actorId, string $actorRole): void
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare('SELECT * FROM cross_department_assignments WHERE id = ?');
@@ -64,6 +64,9 @@ class CrossDepartmentService
         $row = $stmt->fetch();
         if (!$row) {
             throw new RuntimeException('التعيين غير موجود.');
+        }
+        if (!ScopeService::canViewUser($actorId, $actorRole, (int) $row['user_id'])) {
+            throw new RuntimeException('لا يمكنك إنهاء هذا التعيين.');
         }
         $pdo->prepare(
             'UPDATE cross_department_assignments SET is_active = 0, ended_by = ?, ended_at = CURRENT_TIMESTAMP WHERE id = ?'

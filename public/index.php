@@ -30,27 +30,13 @@ session_start();
 
 date_default_timezone_set($config['app']['default_timezone']);
 
-require dirname(__DIR__) . '/src/helpers.php';
-require dirname(__DIR__) . '/src/Database.php';
-require dirname(__DIR__) . '/src/PermissionService.php';
-require dirname(__DIR__) . '/src/DepartmentService.php';
-require dirname(__DIR__) . '/src/WorkScheduleService.php';
-require dirname(__DIR__) . '/src/LeaveHelper.php';
-require dirname(__DIR__) . '/src/MigrationRunner.php';
-require dirname(__DIR__) . '/src/Csrf.php';
-require dirname(__DIR__) . '/src/Auth.php';
-require dirname(__DIR__) . '/src/TimezoneHelper.php';
-require dirname(__DIR__) . '/src/AttendanceService.php';
-require dirname(__DIR__) . '/src/TaskService.php';
-require dirname(__DIR__) . '/src/ReportService.php';
-require dirname(__DIR__) . '/src/UserService.php';
-require dirname(__DIR__) . '/src/ScopeService.php';
-require dirname(__DIR__) . '/src/CrossDepartmentService.php';
-require dirname(__DIR__) . '/src/LocationService.php';
-require dirname(__DIR__) . '/src/JobDescriptionService.php';
-require dirname(__DIR__) . '/src/DbDiagnostics.php';
+require dirname(__DIR__) . '/src/bootstrap.php';
+rec_load_core();
+require dirname(__DIR__) . '/routes/extras.php';
 
-MigrationRunner::ensureLatest();
+if (envBool('RUN_MIGRATIONS_ON_REQUEST', false)) {
+    MigrationRunner::ensureLatest();
+}
 
 $route = $_GET['route'] ?? '/';
 $route = '/' . trim($route, '/');
@@ -59,6 +45,10 @@ if ($route === '//') {
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+if (dispatchExtraRoutes($route, $method)) {
+    return;
+}
 
 try {
     match (true) {
@@ -91,15 +81,17 @@ try {
             }
             $email = strtolower(trim($_POST['email'] ?? ''));
             $password = $_POST['password'] ?? '';
+            if (LoginRateLimiter::tooManyAttempts($email)) {
+                flash('error', LoginRateLimiter::lockMessage());
+                redirect('/login');
+            }
             if (Auth::attempt($email, $password)) {
+                LoginRateLimiter::clear($email);
                 redirect(RoleHelper::dashboardPath(Auth::role()));
             }
+            LoginRateLimiter::hit($email);
+            AuditService::log('login.failed', 'user', null, ['email' => $email], null);
             flash('error', 'البريد أو كلمة المرور غير صحيحة.');
-            redirect('/login');
-        })(),
-
-        $route === '/logout' => (function () {
-            Auth::logout();
             redirect('/login');
         })(),
 
@@ -141,8 +133,14 @@ try {
             $workLocations = $gpsRequired ? LocationService::activeForClient() : [];
             $crossAssignment = CrossDepartmentService::activeForUser(Auth::id());
             $jobDescription = JobDescriptionService::fullForUser(Auth::id());
+            $leaves = LeaveService::listForUser(Auth::id());
+            $isLateToday = false;
+            if (!empty($status['check_in'])) {
+                $localCheckIn = TimezoneHelper::toLocal($status['check_in']['signed_at_utc'], $tz)->format('Y-m-d H:i:s');
+                $isLateToday = WorkScheduleService::isLateCheckIn($localCheckIn);
+            }
             view('employee/dashboard', array_merge(
-                compact('status', 'tasks', 'recent', 'tz', 'gpsRequired', 'crossAssignment', 'workLocations', 'jobDescription'),
+                compact('status', 'tasks', 'recent', 'tz', 'gpsRequired', 'crossAssignment', 'workLocations', 'jobDescription', 'leaves', 'isLateToday'),
                 ['loadSignature' => Auth::can('sign_attendance')]
             ));
         })(),
@@ -244,7 +242,8 @@ try {
             $team = ScopeService::visibleStaff(Auth::id(), Auth::role());
             $today = TimezoneHelper::localWorkDate(TimezoneHelper::utcNow(), Auth::timezone());
             $attendance = AttendanceService::teamAttendanceForActor(Auth::id(), Auth::role(), $today);
-            view('manager/dashboard', compact('team', 'attendance', 'today'));
+            $stats = ReportService::dashboardStats(Auth::id(), Auth::role(), $today);
+            view('manager/dashboard', compact('team', 'attendance', 'today', 'stats'));
         })(),
 
         $route === '/manager/tasks' && $method === 'GET' => (function () {
@@ -302,9 +301,12 @@ try {
                 redirect('/manager/dashboard');
             }
             Auth::requireRole(RoleHelper::managementRoles());
-            $date = $_GET['date'] ?? TimezoneHelper::localWorkDate(TimezoneHelper::utcNow(), Auth::timezone());
-            $attendance = AttendanceService::teamAttendanceForActor(Auth::id(), Auth::role(), $date);
-            view('manager/attendance', compact('attendance', 'date'));
+            $from = $_GET['from'] ?? date('Y-m-d', strtotime('-30 days'));
+            $to = $_GET['to'] ?? date('Y-m-d');
+            $records = AttendanceService::teamRecordsForActor(Auth::id(), Auth::role(), $from, $to);
+            $canManual = Auth::can('view_reports_readonly') || Auth::can('manage_users');
+            $staff = $canManual ? ScopeService::visibleStaff(Auth::id(), Auth::role()) : [];
+            view('manager/attendance', compact('records', 'from', 'to', 'canManual', 'staff'));
         })(),
 
         $route === '/manager/evaluate' && $method === 'GET' => (function () {
@@ -361,6 +363,8 @@ try {
             $isSystemAdmin = Auth::role() === 'system_admin';
             $canAssignPermissions = RoleHelper::canAssignPermissions(Auth::role());
             $users = ScopeService::visibleUsers(Auth::id(), Auth::role());
+            $page = max(1, (int) ($_GET['page'] ?? 1));
+            $pagination = paginate($users, $page, 20);
             $supervisors = UserService::supervisors();
             $departments = DepartmentService::all();
             $availableRoles = $canAssignPermissions
@@ -368,7 +372,7 @@ try {
                 : ['employee' => RoleHelper::label('employee')];
             $canBorrowEmployee = Auth::can('borrow_employee');
             view('manager/users', compact(
-                'users', 'supervisors', 'departments', 'isSystemAdmin',
+                'users', 'pagination', 'supervisors', 'departments', 'isSystemAdmin',
                 'canAssignPermissions', 'availableRoles', 'canBorrowEmployee'
             ));
         })(),
@@ -391,7 +395,8 @@ try {
                     ? (int) ($_POST['manager_id'] ?? 0) ?: null
                     : null;
                 $deptId = (int) ($_POST['department_id'] ?? 0) ?: null;
-                $perms = isset($_POST['permissions']) && is_array($_POST['permissions'])
+                $canAssign = RoleHelper::canAssignPermissions(Auth::role());
+                $perms = ($canAssign && isset($_POST['permissions']) && is_array($_POST['permissions']))
                     ? $_POST['permissions']
                     : null;
                 UserService::create(
@@ -671,31 +676,14 @@ try {
             view('manager/database', compact('driverLabel', 'stats', 'maxUploadMb'));
         })(),
 
-        $route === '/manager/database/export' && $method === 'GET' => (function () {
-            Auth::requireRole(['system_admin']);
-            require dirname(__DIR__) . '/database/DataSync.php';
-            try {
-                $payload = DataSync::exportCurrent();
-                $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-                if ($json === false) {
-                    throw new RuntimeException('تعذّر تحويل البيانات إلى JSON.');
-                }
-                $filename = 'rec-export-' . date('Y-m-d-His') . '.json';
-                header('Content-Type: application/json; charset=utf-8');
-                header('Content-Disposition: attachment; filename="' . $filename . '"');
-                header('Cache-Control: no-store');
-                echo $json;
-                exit;
-            } catch (Throwable $e) {
-                flash('error', 'فشل التصدير: ' . $e->getMessage());
-                redirect('/manager/database');
-            }
-        })(),
-
         $route === '/manager/database/import' && $method === 'POST' => (function () {
             Auth::requireRole(['system_admin']);
             if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
                 flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/manager/database');
+            }
+            if (!verifyAdminPassword($_POST['admin_password'] ?? null)) {
+                flash('error', 'كلمة مرور المسؤول غير صحيحة.');
                 redirect('/manager/database');
             }
 
@@ -733,6 +721,7 @@ try {
             try {
                 $payload = DataSync::loadExport((string) $file['tmp_name']);
                 $summary = DataSync::importCurrent($payload, $mode === 'replace');
+                AuditService::log('database.import', null, null, ['mode' => $mode]);
                 $total = array_sum($summary['imported']);
                 flash('success', 'تم الاستيراد بنجاح — ' . $total . ' سجل في ' . count($summary['imported']) . ' جدول.');
             } catch (Throwable $e) {
@@ -827,7 +816,7 @@ try {
             }
             $userId = (int) ($_POST['user_id'] ?? 0);
             try {
-                CrossDepartmentService::end((int) ($_POST['assignment_id'] ?? 0), Auth::id());
+                CrossDepartmentService::end((int) ($_POST['assignment_id'] ?? 0), Auth::id(), Auth::role());
                 flash('success', 'تم إنهاء التعيين المؤقت.');
             } catch (Throwable $e) {
                 flash('error', $e->getMessage());

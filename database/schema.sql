@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS approved_leaves (
     leave_type ENUM('sick','emergency','regular') NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
-    status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'approved',
+    status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
     approved_by INT UNSIGNED NULL,
     notes TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -178,5 +178,26 @@ CREATE TABLE IF NOT EXISTS job_description_duties (
 INSERT INTO work_schedule (work_start_time, work_end_time, late_grace_minutes, work_days)
 SELECT '08:00', '16:00', 15, '0,1,2,3,4' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM work_schedule LIMIT 1);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NULL,
+    action VARCHAR(64) NOT NULL,
+    entity_type VARCHAR(64) NULL,
+    entity_id INT UNSIGNED NULL,
+    details JSON NULL,
+    ip_address VARCHAR(45) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_created (created_at),
+    CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    attempt_key VARCHAR(190) NOT NULL UNIQUE,
+    attempts INT UNSIGNED NOT NULL DEFAULT 0,
+    locked_until DATETIME NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

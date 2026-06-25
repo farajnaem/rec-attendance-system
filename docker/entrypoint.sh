@@ -18,20 +18,24 @@ uses_mysql() {
 }
 
 if uses_mysql; then
-    echo "Scheduling database init in background..."
-    (
-        sleep 3
-        attempts=0
-        until php docker/wait-db.php; do
-            attempts=$((attempts + 1))
-            if [ "$attempts" -ge 30 ]; then
-                echo "WARNING: MySQL not ready after 60 seconds."
-                exit 0
-            fi
-            sleep 2
-        done
-        php docker/init-db.php || echo "WARNING: schema init failed."
-    ) &
+    echo "Waiting for MySQL..."
+    attempts=0
+    until php docker/wait-db.php; do
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge 30 ]; then
+            echo "ERROR: MySQL not ready after 60 seconds."
+            exit 1
+        fi
+        sleep 2
+    done
+
+    echo "Initializing database..."
+    php docker/init-db.php
+    init_status=$?
+    if [ "$init_status" -ne 0 ]; then
+        echo "ERROR: Database initialization failed (exit $init_status)."
+        exit 1
+    fi
 fi
 
 echo "Starting Apache on port ${PORT}..."

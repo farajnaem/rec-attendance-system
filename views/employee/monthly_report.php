@@ -46,15 +46,17 @@ $months = [1=>'يناير',2=>'فبراير',3=>'مارس',4=>'أبريل',5=>'�
 <div class="card">
     <h2>سجل الحضور اليومي</h2>
     <table>
-        <thead><tr><th>التاريخ</th><th>يوم عمل</th><th>حضور</th><th>انصراف</th><th>كامل</th></tr></thead>
+        <thead><tr><th>التاريخ</th><th>يوم عمل</th><th>إجازة</th><th>حضور</th><th>انصراف</th><th>كامل</th><th>متأخر</th></tr></thead>
         <tbody>
         <?php foreach ($report['attendance']['daily'] as $d): if (!$d['is_workday']) continue; ?>
         <tr>
             <td><?= e($d['date']) ?></td>
             <td>نعم</td>
+            <td><?= $d['on_leave'] ? 'نعم' : '—' ?></td>
             <td><?= $d['check_in'] ? '✓' : '—' ?></td>
             <td><?= $d['check_out'] ? '✓' : '—' ?></td>
             <td><?= $d['complete'] ? '✓' : '✗' ?></td>
+            <td><?= $d['late'] ? 'نعم' : '—' ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>

@@ -81,4 +81,27 @@ class WorkScheduleService
             '6' => 'السبت',
         ];
     }
+
+    public static function isWorkDay(DateTimeInterface $date): bool
+    {
+        $schedule = self::get();
+        $dayOfWeek = (string) $date->format('w');
+        $workDays = array_map('trim', explode(',', $schedule['work_days'] ?? '0,1,2,3,4'));
+
+        return in_array($dayOfWeek, $workDays, true);
+    }
+
+    public static function workingDaysInMonth(int $year, int $month): int
+    {
+        $days = 0;
+        $start = new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month));
+        $end = $start->modify('last day of this month');
+        for ($d = $start; $d <= $end; $d = $d->modify('+1 day')) {
+            if (self::isWorkDay($d)) {
+                $days++;
+            }
+        }
+
+        return $days;
+    }
 }

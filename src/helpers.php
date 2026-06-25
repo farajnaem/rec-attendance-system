@@ -95,7 +95,33 @@ function roleLabel(string $role): string
 
 function clientIp(): string
 {
-    return $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $trusted = env('TRUSTED_PROXIES', '');
+    $remote = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+    if ($trusted === '' || $trusted === '*') {
+        $forwarded = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null;
+        if ($forwarded !== null && $forwarded !== '') {
+            $parts = array_map('trim', explode(',', $forwarded));
+            return $parts[0] !== '' ? $parts[0] : $remote;
+        }
+        return $remote;
+    }
+
+    return $remote;
+}
+
+function passwordMinLength(): int
+{
+    return 8;
+}
+
+function verifyAdminPassword(?string $password): bool
+{
+    if ($password === null || $password === '') {
+        return false;
+    }
+
+    return Auth::verifyPassword($password);
 }
 
 function currentRoute(): string
@@ -146,4 +172,27 @@ function navIsActive(string $path, bool $exact = false): bool
         return $current === $path;
     }
     return $current === $path || str_starts_with($current, $path . '/');
+}
+
+/**
+ * @return array{items: array, page: int, per_page: int, total: int, pages: int}
+ */
+function paginate(array $items, int $page = 1, int $perPage = 20): array
+{
+    $total = count($items);
+    $page = max(1, $page);
+    $perPage = max(1, $perPage);
+    $pages = max(1, (int) ceil($total / $perPage));
+    if ($page > $pages) {
+        $page = $pages;
+    }
+    $offset = ($page - 1) * $perPage;
+
+    return [
+        'items' => array_slice($items, $offset, $perPage),
+        'page' => $page,
+        'per_page' => $perPage,
+        'total' => $total,
+        'pages' => $pages,
+    ];
 }

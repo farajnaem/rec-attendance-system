@@ -47,6 +47,9 @@
                 <div class="value" style="font-size:1.1rem;color:var(--success)">
                     <?= e(TimezoneHelper::formatArabic($status['check_in']['signed_at_utc'], $tz)) ?>
                 </div>
+                <?php if (!empty($isLateToday)): ?>
+                <span class="badge badge-pending" style="margin-top:0.35rem;display:inline-block">متأخر</span>
+                <?php endif; ?>
             <?php else: ?>
                 <div class="value" style="font-size:1rem;color:var(--warning)">لم يُسجَّل بعد</div>
             <?php endif; ?>
@@ -103,6 +106,65 @@
     <p class="text-muted">تسجيل الحضور غير مفعّل لحسابك. راجع المسؤول إن كان ذلك مطلوباً.</p>
 </div>
 <?php endif; ?>
+
+<div class="card" id="leaves">
+    <h2>طلبات الإجازة</h2>
+    <?php
+    $leaveStatusLabels = [
+        'pending' => 'قيد الانتظار',
+        'approved' => 'موافق عليها',
+        'rejected' => 'مرفوضة',
+    ];
+    ?>
+    <details class="card" style="margin-bottom:1rem;padding:1rem;background:#f8fafc">
+        <summary style="cursor:pointer;font-weight:600">طلب إجازة جديد</summary>
+        <form method="post" action="<?= e(url('/employee/leaves/request')) ?>" style="margin-top:1rem">
+            <?= Csrf::field() ?>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>نوع الإجازة</label>
+                    <select name="leave_type" class="form-control" required>
+                        <?php foreach (LeaveHelper::types() as $type => $label): ?>
+                        <option value="<?= e($type) ?>"><?= e($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>من تاريخ</label>
+                    <input type="date" name="start_date" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>إلى تاريخ</label>
+                    <input type="date" name="end_date" class="form-control" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>ملاحظات (اختياري)</label>
+                <textarea name="notes" class="form-control" rows="2"></textarea>
+            </div>
+            <button type="submit" class="btn">إرسال الطلب</button>
+        </form>
+    </details>
+    <table>
+        <thead>
+            <tr><th>النوع</th><th>من</th><th>إلى</th><th>الحالة</th><th>ملاحظات</th></tr>
+        </thead>
+        <tbody>
+        <?php if (empty($leaves)): ?>
+            <tr><td colspan="5" class="text-muted">لا توجد طلبات إجازة</td></tr>
+        <?php else: foreach ($leaves as $leave): ?>
+            <?php $st = $leave['status'] ?? 'pending'; ?>
+            <tr>
+                <td><?= e(LeaveHelper::label($leave['leave_type'])) ?></td>
+                <td><?= e($leave['start_date']) ?></td>
+                <td><?= e($leave['end_date']) ?></td>
+                <td><span class="badge badge-<?= $st === 'approved' ? 'evaluated' : 'pending' ?>"><?= e($leaveStatusLabels[$st] ?? $st) ?></span></td>
+                <td><?= e($leave['notes'] ?? '—') ?></td>
+            </tr>
+        <?php endforeach; endif; ?>
+        </tbody>
+    </table>
+</div>
 
 <div class="grid-2">
     <div class="card">
