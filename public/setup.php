@@ -84,7 +84,7 @@ $loginUrl = rtrim($config['app']['url'] ?? '', '/') . '/login';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>إعداد النظام — REC</title>
-    <link rel="stylesheet" href="assets/css/app.css">
+    <link rel="stylesheet" href="/assets/css/app.css?v=2">
 </head>
 <body>
 <div class="login-page">

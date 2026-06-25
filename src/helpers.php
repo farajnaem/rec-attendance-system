@@ -33,6 +33,16 @@ function url(string $path = ''): string
     return $base . ($path === '/' ? '' : $path);
 }
 
+/** مسار ثابت لملفات CSS/JS — يعمل من أي صفحة بما فيها setup.php */
+function asset(string $path): string
+{
+    $path = '/' . ltrim($path, '/');
+    $file = dirname(__DIR__) . '/public' . $path;
+    $version = is_file($file) ? (string) filemtime($file) : '';
+    $url = base_path() . $path;
+    return $version !== '' ? $url . '?v=' . $version : $url;
+}
+
 function redirect(string $path): never
 {
     header('Location: ' . url($path));
