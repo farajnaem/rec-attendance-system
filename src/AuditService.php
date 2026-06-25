@@ -15,19 +15,23 @@ class AuditService
             return;
         }
 
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare(
-            'INSERT INTO audit_log (user_id, action, entity_type, entity_id, details, ip_address)
-             VALUES (?, ?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([
-            $userId ?? (Auth::check() ? Auth::id() : null),
-            $action,
-            $entityType,
-            $entityId,
-            $details !== null ? json_encode($details, JSON_UNESCAPED_UNICODE) : null,
-            clientIp(),
-        ]);
+        try {
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare(
+                'INSERT INTO audit_log (user_id, action, entity_type, entity_id, details, ip_address)
+                 VALUES (?, ?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([
+                $userId ?? (Auth::check() ? Auth::id() : null),
+                $action,
+                $entityType,
+                $entityId,
+                $details !== null ? json_encode($details, JSON_UNESCAPED_UNICODE) : null,
+                clientIp(),
+            ]);
+        } catch (Throwable) {
+            // لا نُعطّل تسجيل الدخول أو العمليات الأساسية إذا فشل التدقيق
+        }
     }
 
     public static function recent(int $limit = 100): array

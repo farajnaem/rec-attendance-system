@@ -10,6 +10,7 @@ class MigrationRunner
     private const PHASE_4 = 'phase_4_job_title';
     private const PHASE_5 = 'phase_5_sync_permissions';
     private const PHASE_6 = 'phase_6_audit_security';
+    private const PHASE_7 = 'phase_7_leaves_workflow';
 
     public static function ensureLatest(): void
     {
@@ -39,6 +40,10 @@ class MigrationRunner
         if (!self::isApplied($pdo, self::PHASE_6)) {
             self::runPhase6($pdo);
             self::markApplied($pdo, self::PHASE_6);
+        }
+        if (!self::isApplied($pdo, self::PHASE_7)) {
+            self::runPhase7($pdo);
+            self::markApplied($pdo, self::PHASE_7);
         }
     }
 
@@ -561,5 +566,57 @@ class MigrationRunner
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
         }
+    }
+
+    /**
+     * خوادم قديمة: phase_1 مُطبَّق قبل إضافة approved_leaves أو عمود status.
+     */
+    private static function runPhase7(PDO $pdo): void
+    {
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'sqlite') {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS approved_leaves (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                leave_type TEXT NOT NULL CHECK(leave_type IN ("sick","emergency","regular")),
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT "approved" CHECK(status IN ("pending","approved","rejected")),
+                approved_by INTEGER NULL,
+                notes TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
+            )');
+            self::addColumnIfMissing($pdo, 'approved_leaves', 'status', 'TEXT NOT NULL DEFAULT "approved"');
+            self::addColumnIfMissing($pdo, 'approved_leaves', 'approved_by', 'INTEGER NULL');
+            self::addColumnIfMissing($pdo, 'approved_leaves', 'notes', 'TEXT NULL');
+            self::addColumnIfMissing($pdo, 'approved_leaves', 'created_at', 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
+            return;
+        }
+
+        $pdo->exec('CREATE TABLE IF NOT EXISTS approved_leaves (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            leave_type ENUM("sick","emergency","regular") NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            status ENUM("pending","approved","rejected") NOT NULL DEFAULT "approved",
+            approved_by INT UNSIGNED NULL,
+            notes TEXT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_leave_user_v7 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            CONSTRAINT fk_leave_approver_v7 FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+
+        self::addColumnIfMissing(
+            $pdo,
+            'approved_leaves',
+            'status',
+            "ENUM('pending','approved','rejected') NOT NULL DEFAULT 'approved'"
+        );
+        self::addColumnIfMissing($pdo, 'approved_leaves', 'approved_by', 'INT UNSIGNED NULL');
+        self::addColumnIfMissing($pdo, 'approved_leaves', 'notes', 'TEXT NULL');
+        self::addColumnIfMissing($pdo, 'approved_leaves', 'created_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
     }
 }

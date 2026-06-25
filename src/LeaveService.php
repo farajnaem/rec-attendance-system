@@ -6,6 +6,10 @@ class LeaveService
 {
     public static function listForManager(int $actorId, string $actorRole, ?string $status = null): array
     {
+        if (!self::tableExists()) {
+            return [];
+        }
+
         $pdo = Database::getConnection();
         $staff = ScopeService::visibleStaff($actorId, $actorRole);
         $ids = array_map(fn ($u) => (int) $u['id'], $staff);
@@ -33,6 +37,10 @@ class LeaveService
 
     public static function listForUser(int $userId): array
     {
+        if (!self::tableExists()) {
+            return [];
+        }
+
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             'SELECT * FROM approved_leaves WHERE user_id = ? ORDER BY start_date DESC, id DESC'
@@ -114,12 +122,24 @@ class LeaveService
 
     public static function isOnLeave(int $userId, string $date): bool
     {
+        if (!self::tableExists()) {
+            return false;
+        }
+
         $pdo = Database::getConnection();
-        $stmt = $pdo->prepare(
-            'SELECT 1 FROM approved_leaves
-             WHERE user_id = ? AND status = ? AND start_date <= ? AND end_date >= ? LIMIT 1'
-        );
-        $stmt->execute([$userId, 'approved', $date, $date]);
+        if (self::hasStatusColumn()) {
+            $stmt = $pdo->prepare(
+                'SELECT 1 FROM approved_leaves
+                 WHERE user_id = ? AND status = ? AND start_date <= ? AND end_date >= ? LIMIT 1'
+            );
+            $stmt->execute([$userId, 'approved', $date, $date]);
+        } else {
+            $stmt = $pdo->prepare(
+                'SELECT 1 FROM approved_leaves
+                 WHERE user_id = ? AND start_date <= ? AND end_date >= ? LIMIT 1'
+            );
+            $stmt->execute([$userId, $date, $date]);
+        }
 
         return (bool) $stmt->fetchColumn();
     }
@@ -132,5 +152,68 @@ class LeaveService
         $row = $stmt->fetch();
 
         return $row ?: null;
+    }
+
+    private static function tableExists(): bool
+    {
+        static $exists = null;
+        if ($exists !== null) {
+            return $exists;
+        }
+
+        try {
+            $pdo = Database::getConnection();
+            $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+            if ($driver === 'sqlite') {
+                $stmt = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='approved_leaves' LIMIT 1");
+            } else {
+                $stmt = $pdo->query(
+                    "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'approved_leaves' LIMIT 1"
+                );
+            }
+            $exists = (bool) $stmt->fetchColumn();
+        } catch (Throwable) {
+            $exists = false;
+        }
+
+        return $exists;
+    }
+
+    private static function hasStatusColumn(): bool
+    {
+        static $has = null;
+        if ($has !== null) {
+            return $has;
+        }
+        if (!self::tableExists()) {
+            $has = false;
+            return false;
+        }
+
+        try {
+            $pdo = Database::getConnection();
+            if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+                $cols = $pdo->query('PRAGMA table_info(approved_leaves)')->fetchAll();
+                foreach ($cols as $col) {
+                    if (($col['name'] ?? '') === 'status') {
+                        $has = true;
+                        return true;
+                    }
+                }
+                $has = false;
+                return false;
+            }
+
+            $stmt = $pdo->prepare(
+                'SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+            );
+            $stmt->execute(['approved_leaves', 'status']);
+            $has = (int) $stmt->fetchColumn() > 0;
+        } catch (Throwable) {
+            $has = false;
+        }
+
+        return $has;
     }
 }
