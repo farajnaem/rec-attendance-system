@@ -185,6 +185,7 @@ final class DataSync
     {
         $driver = self::pdoDriver($pdo);
         $summary = ['imported' => [], 'skipped' => []];
+        $tablesToReset = [];
 
         if ($driver === 'mysql') {
             $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
@@ -192,9 +193,9 @@ final class DataSync
             $pdo->exec('PRAGMA foreign_keys = OFF');
         }
 
-        $pdo->beginTransaction();
-
         try {
+            $pdo->beginTransaction();
+
             if ($replace) {
                 foreach (array_reverse(self::TABLES) as $table) {
                     if (!self::tableExists($pdo, $driver, $table)) {
@@ -233,13 +234,20 @@ final class DataSync
                     $imported++;
                 }
 
-                self::resetSequence($pdo, $driver, $table);
+                if ($imported > 0) {
+                    $tablesToReset[] = $table;
+                }
                 $summary['imported'][$table] = $imported;
             }
 
-            $pdo->commit();
+            self::safeCommit($pdo);
+
+            // MySQL: ALTER TABLE (AUTO_INCREMENT) ينهي المعاملة — يُنفَّذ بعد commit
+            foreach ($tablesToReset as $table) {
+                self::resetSequence($pdo, $driver, $table);
+            }
         } catch (Throwable $e) {
-            $pdo->rollBack();
+            self::safeRollBack($pdo);
             throw $e;
         } finally {
             if ($driver === 'mysql') {
@@ -250,6 +258,20 @@ final class DataSync
         }
 
         return $summary;
+    }
+
+    private static function safeCommit(PDO $pdo): void
+    {
+        if ($pdo->inTransaction()) {
+            $pdo->commit();
+        }
+    }
+
+    private static function safeRollBack(PDO $pdo): void
+    {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
     }
 
     public static function driverLabel(?PDO $pdo = null): string
