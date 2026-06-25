@@ -1,5 +1,7 @@
 # بيانات محلية
 database/attendance.sqlite
+database/export.json
+database/*.export.json
 public/database/
 php.local.ini
 .env
