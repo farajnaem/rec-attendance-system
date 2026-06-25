@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/Database.php';
+require dirname(__DIR__) . '/src/MigrationRunner.php';
 
 try {
     $pdo = Database::getConnection();
@@ -13,6 +14,7 @@ try {
 
 try {
     $pdo->query('SELECT 1 FROM users LIMIT 1');
+    MigrationRunner::ensureLatest();
     echo "Database already initialized.\n";
     exit(0);
 } catch (Throwable) {
@@ -45,4 +47,5 @@ foreach ($statements as $statement) {
     }
 }
 
+MigrationRunner::ensureLatest();
 echo "Database schema applied successfully.\n";

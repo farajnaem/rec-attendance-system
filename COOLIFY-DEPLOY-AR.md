@@ -68,7 +68,7 @@ DB_PASS=YOUR_STRONG_PASSWORD
 
 ```env
 APP_NAME=جمعية مركز الإرشاد التربوي REC
-APP_URL=https://attendance.yourdomain.com
+APP_URL=https://employee.rec-soc.org
 APP_TIMEZONE=Asia/Riyadh
 APP_DEBUG=false
 SETUP_ENABLED=true

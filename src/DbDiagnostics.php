@@ -15,6 +15,9 @@ function dbConnectionSource(): string
     if (env('DB_URL')) {
         return 'DB_URL';
     }
+    if (env('MYSQL_HOST') ?? env('MYSQLHOST')) {
+        return 'MYSQL_HOST/...';
+    }
 
     return 'DB_HOST/DB_USER/...';
 }

@@ -13,6 +13,7 @@ uses_mysql() {
     [ -n "${DATABASE_URL:-}" ] \
         || [ -n "${MYSQL_URL:-}" ] \
         || [ -n "${DB_URL:-}" ] \
+        || [ -n "${MYSQL_HOST:-}" ] \
         || [ "${DB_DRIVER:-mysql}" = "mysql" ]
 }
 

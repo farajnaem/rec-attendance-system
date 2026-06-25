@@ -35,6 +35,7 @@ class TimezoneHelper
     public static function commonTimezones(): array
     {
         return [
+            'Asia/Riyadh' => 'الرياض',
             'Asia/Jerusalem' => 'القدس',
             'Asia/Gaza' => 'غزة',
             'Europe/Rome' => 'إيطاليا',
@@ -48,6 +49,10 @@ class TimezoneHelper
 
     public static function defaultTimezone(): string
     {
-        return 'Asia/Jerusalem';
+        if (!function_exists('app_config')) {
+            require_once dirname(__DIR__) . '/config/config.php';
+        }
+        $tz = app_config()['app']['default_timezone'] ?? 'Asia/Riyadh';
+        return is_string($tz) && $tz !== '' ? $tz : 'Asia/Riyadh';
     }
 }

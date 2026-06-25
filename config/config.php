@@ -34,10 +34,13 @@ if (!function_exists('env')) {
     function env(string $key, ?string $default = null): ?string
     {
         $value = getenv($key);
+        if ($value === false && isset($_ENV[$key])) {
+            $value = $_ENV[$key];
+        }
         if ($value === false || $value === '') {
             return $default;
         }
-        return $value;
+        return (string) $value;
     }
 }
 
@@ -86,23 +89,44 @@ if (!function_exists('parseDatabaseUrl')) {
     }
 }
 
+if (!function_exists('resolveFromMysqlEnv')) {
+    /** متغيرات Coolify عند ربط قاعدة MySQL دون DATABASE_URL */
+    function resolveFromMysqlEnv(): ?array
+    {
+        $host = env('MYSQL_HOST') ?? env('MYSQLHOST');
+        if ($host === null || $host === '') {
+            return null;
+        }
+
+        return [
+            'driver' => 'mysql',
+            'host' => $host,
+            'port' => (int) (env('MYSQL_PORT') ?? env('MYSQLPORT') ?? '3306'),
+            'name' => env('MYSQL_DATABASE') ?? env('MYSQLDATABASE') ?? 'default',
+            'user' => env('MYSQL_USER') ?? env('MYSQLUSER') ?? 'mysql',
+            'pass' => env('MYSQL_PASSWORD') ?? env('MYSQLPASSWORD') ?? env('MYSQL_ROOT_PASSWORD') ?? '',
+            'charset' => 'utf8mb4',
+        ];
+    }
+}
+
 if (!function_exists('resolveDatabaseConfig')) {
     function resolveDatabaseConfig(): array
     {
-        $driver = env('DB_DRIVER', 'mysql');
+        $sqlitePath = (static function (): string {
+            $path = env('DB_SQLITE_PATH', dirname(__DIR__) . '/database/attendance.sqlite');
+            if ($path === null || $path === '') {
+                return dirname(__DIR__) . '/database/attendance.sqlite';
+            }
+            if (!preg_match('~^([A-Za-z]:)?[/\\\\]~', $path)) {
+                return dirname(__DIR__) . '/' . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($path, '/\\'));
+            }
+            return $path;
+        })();
 
         $db = [
-            'driver' => $driver,
-            'sqlite_path' => (static function (): string {
-                $path = env('DB_SQLITE_PATH', dirname(__DIR__) . '/database/attendance.sqlite');
-                if ($path === null || $path === '') {
-                    return dirname(__DIR__) . '/database/attendance.sqlite';
-                }
-                if (!preg_match('~^([A-Za-z]:)?[/\\\\]~', $path)) {
-                    return dirname(__DIR__) . '/' . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($path, '/\\'));
-                }
-                return $path;
-            })(),
+            'driver' => env('DB_DRIVER', 'mysql'),
+            'sqlite_path' => $sqlitePath,
             'host' => env('DB_HOST', 'localhost'),
             'port' => (int) env('DB_PORT', '3306'),
             'name' => env('DB_NAME', 'rec_attendance'),
@@ -111,12 +135,23 @@ if (!function_exists('resolveDatabaseConfig')) {
             'charset' => 'utf8mb4',
         ];
 
+        // الأولوية: DATABASE_URL (Coolify) ثم MYSQL_URL ثم متغيرات MYSQL_* ثم DB_*
         $dbUrl = env('DATABASE_URL') ?? env('MYSQL_URL') ?? env('DB_URL');
         $fromUrl = parseDatabaseUrl($dbUrl);
         if ($fromUrl !== null) {
-            $db = array_merge($db, $fromUrl);
+            return array_merge($db, $fromUrl);
         }
 
+        $fromMysql = resolveFromMysqlEnv();
+        if ($fromMysql !== null) {
+            return array_merge($db, $fromMysql);
+        }
+
+        if ($db['driver'] === 'sqlite') {
+            return $db;
+        }
+
+        $db['driver'] = 'mysql';
         return $db;
     }
 }
@@ -130,9 +165,9 @@ if (!function_exists('app_config')) {
                 'db' => resolveDatabaseConfig(),
                 'app' => [
                     'name' => env('APP_NAME', 'جمعية مركز الإرشاد التربوي REC'),
-                    'url' => rtrim(env('APP_URL', 'http://localhost:8080'), '/'),
+                    'url' => rtrim(env('APP_URL', 'https://employee.rec-soc.org'), '/'),
                     'base_path' => env('APP_BASE_PATH', ''),
-                    'default_timezone' => env('APP_TIMEZONE', 'Asia/Jerusalem'),
+                    'default_timezone' => env('APP_TIMEZONE', 'Asia/Riyadh'),
                     'debug' => envBool('APP_DEBUG', false),
                     'setup_enabled' => envBool('SETUP_ENABLED', false),
                 ],
