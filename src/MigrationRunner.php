@@ -13,6 +13,7 @@ class MigrationRunner
     {
         $pdo = Database::getConnection();
         self::ensureMigrationsTable($pdo);
+        self::ensureUsersRoleColumn($pdo);
         if (!self::isApplied($pdo, self::PHASE)) {
             self::runPhase1($pdo);
             self::markApplied($pdo, self::PHASE);
@@ -242,6 +243,7 @@ class MigrationRunner
 
     private static function migrateLegacyRoles(PDO $pdo): void
     {
+        self::ensureUsersRoleColumn($pdo);
         $map = [
             'admin' => 'system_admin',
             'manager' => 'program_supervisor',
@@ -249,6 +251,26 @@ class MigrationRunner
         ];
         foreach ($map as $old => $new) {
             $pdo->prepare('UPDATE users SET role = ? WHERE role = ?')->execute([$new, $old]);
+        }
+    }
+
+    /** يوسّع عمود role ليدعم الأدوار الجديدة (system_admin, program_supervisor, ...) */
+    private static function ensureUsersRoleColumn(PDO $pdo): void
+    {
+        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+            return;
+        }
+        try {
+            $pdo->query('SELECT 1 FROM users LIMIT 1');
+        } catch (Throwable) {
+            return;
+        }
+        try {
+            $pdo->exec(
+                "ALTER TABLE users MODIFY COLUMN role VARCHAR(32) NOT NULL DEFAULT 'employee'"
+            );
+        } catch (Throwable) {
+            // قد يكون العمود معدّلاً مسبقاً
         }
     }
 
