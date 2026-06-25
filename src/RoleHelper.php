@@ -51,6 +51,12 @@ class RoleHelper
         return !self::isEmployee($role);
     }
 
+    /** مدير النظام فقط — عمليات حساسة (نسخ احتياطي، استيراد...) */
+    public static function isSystemAdmin(string $role): bool
+    {
+        return self::normalizeRole($role) === 'system_admin';
+    }
+
     /** مدير النظام أو المدير — إدارة الدوائر والصلاحيات */
     public static function isOrgAdmin(string $role): bool
     {

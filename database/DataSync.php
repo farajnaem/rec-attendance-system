@@ -84,24 +84,42 @@ final class DataSync
     public static function exportFromSqlite(?string $sqlitePath = null): array
     {
         $pdo = self::connectSqlite($sqlitePath);
+        $payload = self::exportFromConnection($pdo);
+        $payload['sqlite_path'] = $sqlitePath ?? self::defaultSqlitePath();
+
+        return $payload;
+    }
+
+    /** تصدير من أي اتصال PDO (SQLite أو MySQL) */
+    public static function exportFromConnection(PDO $pdo): array
+    {
+        $driver = self::pdoDriver($pdo);
         $payload = [
             'exported_at' => date('c'),
-            'source' => 'sqlite',
-            'sqlite_path' => $sqlitePath ?? self::defaultSqlitePath(),
+            'source' => $driver,
+            'app' => env('APP_NAME', 'REC'),
             'tables' => [],
             'stats' => [],
         ];
 
         foreach (self::TABLES as $table) {
-            if (!self::sqliteTableExists($pdo, $table)) {
+            if (!self::tableExists($pdo, $driver, $table)) {
                 continue;
             }
-            $rows = $pdo->query('SELECT * FROM ' . self::quoteIdentifier($table, 'sqlite'))->fetchAll();
+            $rows = $pdo->query('SELECT * FROM ' . self::quoteIdentifier($table, $driver))->fetchAll();
             $payload['tables'][$table] = $rows;
             $payload['stats'][$table] = count($rows);
         }
 
         return $payload;
+    }
+
+    /** تصدير من قاعدة البيانات الحالية للتطبيق */
+    public static function exportCurrent(): array
+    {
+        require_once dirname(__DIR__) . '/src/Database.php';
+
+        return self::exportFromConnection(Database::getConnection());
     }
 
     public static function saveExport(array $payload, string $file): void
@@ -144,29 +162,56 @@ final class DataSync
 
         $pdo = self::connectMysql($databaseUrl);
 
+        return self::importToConnection($pdo, $payload, $replace);
+    }
+
+    /** استيراد إلى قاعدة البيانات الحالية للتطبيق */
+    public static function importCurrent(array $payload, bool $replace = true): array
+    {
+        require_once dirname(__DIR__) . '/src/Database.php';
+        require_once dirname(__DIR__) . '/src/MigrationRunner.php';
+
+        Database::resetConnection();
+        MigrationRunner::ensureLatest();
+
+        $pdo = Database::getConnection();
+        $summary = self::importToConnection($pdo, $payload, $replace);
+        Database::resetConnection();
+
+        return $summary;
+    }
+
+    public static function importToConnection(PDO $pdo, array $payload, bool $replace = true): array
+    {
+        $driver = self::pdoDriver($pdo);
         $summary = ['imported' => [], 'skipped' => []];
 
-        $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+        if ($driver === 'mysql') {
+            $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+        } else {
+            $pdo->exec('PRAGMA foreign_keys = OFF');
+        }
+
         $pdo->beginTransaction();
 
         try {
             if ($replace) {
                 foreach (array_reverse(self::TABLES) as $table) {
-                    if (!self::mysqlTableExists($pdo, $table)) {
+                    if (!self::tableExists($pdo, $driver, $table)) {
                         continue;
                     }
-                    $pdo->exec('DELETE FROM ' . self::quoteIdentifier($table, 'mysql'));
+                    $pdo->exec('DELETE FROM ' . self::quoteIdentifier($table, $driver));
                 }
             }
 
             foreach (self::TABLES as $table) {
                 $rows = $payload['tables'][$table] ?? [];
-                if ($rows === [] || !self::mysqlTableExists($pdo, $table)) {
+                if ($rows === [] || !self::tableExists($pdo, $driver, $table)) {
                     $summary['skipped'][$table] = count($rows);
                     continue;
                 }
 
-                $columns = self::mysqlColumns($pdo, $table);
+                $columns = self::tableColumns($pdo, $driver, $table);
                 $imported = 0;
                 foreach ($rows as $row) {
                     if (!is_array($row)) {
@@ -180,15 +225,15 @@ final class DataSync
                     $placeholders = implode(', ', array_fill(0, count($fields), '?'));
                     $sql = sprintf(
                         'INSERT INTO %s (%s) VALUES (%s)',
-                        self::quoteIdentifier($table, 'mysql'),
-                        implode(', ', array_map(fn ($f) => self::quoteIdentifier($f, 'mysql'), $fields)),
+                        self::quoteIdentifier($table, $driver),
+                        implode(', ', array_map(fn ($f) => self::quoteIdentifier($f, $driver), $fields)),
                         $placeholders
                     );
                     $pdo->prepare($sql)->execute(array_values($data));
                     $imported++;
                 }
 
-                self::resetAutoIncrement($pdo, $table);
+                self::resetSequence($pdo, $driver, $table);
                 $summary['imported'][$table] = $imported;
             }
 
@@ -197,10 +242,86 @@ final class DataSync
             $pdo->rollBack();
             throw $e;
         } finally {
-            $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+            if ($driver === 'mysql') {
+                $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+            } else {
+                $pdo->exec('PRAGMA foreign_keys = ON');
+            }
         }
 
         return $summary;
+    }
+
+    public static function driverLabel(?PDO $pdo = null): string
+    {
+        require_once dirname(__DIR__) . '/src/Database.php';
+        $pdo = $pdo ?? Database::getConnection();
+        $driver = self::pdoDriver($pdo);
+
+        if ($driver === 'sqlite') {
+            $cfg = app_config()['db'] ?? [];
+
+            return 'SQLite — ' . ($cfg['sqlite_path'] ?? 'محلي');
+        }
+
+        $cfg = app_config()['db'] ?? [];
+
+        return 'MySQL — ' . ($cfg['host'] ?? '?') . ' / ' . ($cfg['name'] ?? '?');
+    }
+
+    private static function pdoDriver(PDO $pdo): string
+    {
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+        return $driver === 'sqlite' ? 'sqlite' : 'mysql';
+    }
+
+    private static function tableExists(PDO $pdo, string $driver, string $table): bool
+    {
+        return $driver === 'sqlite'
+            ? self::sqliteTableExists($pdo, $table)
+            : self::mysqlTableExists($pdo, $table);
+    }
+
+    private static function tableColumns(PDO $pdo, string $driver, string $table): array
+    {
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->query('PRAGMA table_info(' . self::quoteIdentifier($table, 'sqlite') . ')');
+
+            return array_column($stmt->fetchAll(), 'name');
+        }
+
+        return self::mysqlColumns($pdo, $table);
+    }
+
+    private static function resetSequence(PDO $pdo, string $driver, string $table): void
+    {
+        if ($driver === 'mysql') {
+            self::resetAutoIncrement($pdo, $table);
+
+            return;
+        }
+
+        self::resetSqliteSequence($pdo, $table);
+    }
+
+    private static function resetSqliteSequence(PDO $pdo, string $table): void
+    {
+        if (!self::sqliteTableExists($pdo, $table)) {
+            return;
+        }
+
+        try {
+            $quoted = self::quoteIdentifier($table, 'sqlite');
+            $max = (int) $pdo->query('SELECT COALESCE(MAX(id), 0) FROM ' . $quoted)->fetchColumn();
+            $pdo->exec('DELETE FROM sqlite_sequence WHERE name = ' . $pdo->quote($table));
+            if ($max > 0) {
+                $stmt = $pdo->prepare('INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)');
+                $stmt->execute([$table, $max]);
+            }
+        } catch (Throwable) {
+            // بعض الجداول لا تستخدم AUTOINCREMENT
+        }
     }
 
     private static function sqliteTableExists(PDO $pdo, string $table): bool

@@ -1,10 +1,12 @@
 <?php $title = 'لوحتي'; ?>
-<h1>مرحباً <?= e(Auth::name()) ?></h1>
-<p class="text-muted">
-    <?= e(RoleHelper::label(Auth::role())) ?> —
-    المنطقة الزمنية: <?= e(TimezoneHelper::commonTimezones()[$tz] ?? $tz) ?> —
-    اليوم: <?= e($status['local_date']) ?>
-</p>
+<div class="page-header">
+    <h1>مرحباً <?= e(Auth::name()) ?></h1>
+    <p class="page-header__subtitle">
+        <?= e(RoleHelper::label(Auth::role())) ?> —
+        المنطقة الزمنية: <?= e(TimezoneHelper::commonTimezones()[$tz] ?? $tz) ?> —
+        اليوم: <?= e($status['local_date']) ?>
+    </p>
+</div>
 <?php if (!empty($crossAssignment)): ?>
 <p class="alert alert-success" style="margin-bottom:1rem">
     تعيين مؤقت: تعمل حالياً في دائرة <strong><?= e($crossAssignment['target_department_name']) ?></strong>

@@ -64,6 +64,11 @@ class Auth
         return $_SESSION['user_name'] ?? '';
     }
 
+    public static function email(): string
+    {
+        return $_SESSION['user_email'] ?? '';
+    }
+
     public static function requireLogin(): void
     {
         if (!self::check()) {

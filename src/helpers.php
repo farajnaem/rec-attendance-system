@@ -97,3 +97,53 @@ function clientIp(): string
 {
     return $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 }
+
+function currentRoute(): string
+{
+    $route = $_GET['route'] ?? currentPath();
+    $route = '/' . trim((string) $route, '/');
+
+    return $route === '//' ? '/' : $route;
+}
+
+function userInitials(string $name): string
+{
+    $parts = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    if ($parts === []) {
+        return '?';
+    }
+    if (count($parts) === 1) {
+        return mb_strtoupper(mb_substr($parts[0], 0, 2));
+    }
+
+    return mb_strtoupper(mb_substr($parts[0], 0, 1) . mb_substr($parts[1], 0, 1));
+}
+
+function userHandle(string $email): string
+{
+    $email = trim(strtolower($email));
+    $local = explode('@', $email)[0] ?? $email;
+
+    return '@' . $local;
+}
+
+function currentPath(): string
+{
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+    $path = rtrim($path, '/') ?: '/';
+    $base = base_path();
+    if ($base !== '' && str_starts_with($path, $base)) {
+        $path = substr($path, strlen($base)) ?: '/';
+    }
+    return $path;
+}
+
+function navIsActive(string $path, bool $exact = false): bool
+{
+    $current = currentPath();
+    $path = rtrim($path, '/') ?: '/';
+    if ($exact) {
+        return $current === $path;
+    }
+    return $current === $path || str_starts_with($current, $path . '/');
+}

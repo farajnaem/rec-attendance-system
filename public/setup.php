@@ -77,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error && $userCount === 0) {
 }
 
 $loginUrl = rtrim($config['app']['url'] ?? '', '/') . '/login';
+$appName = htmlspecialchars($config['app']['name'] ?? 'REC', ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -84,33 +85,51 @@ $loginUrl = rtrim($config['app']['url'] ?? '', '/') . '/login';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>إعداد النظام — REC</title>
-    <link rel="stylesheet" href="/assets/css/app.css?v=2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/shell.css">
+    <link rel="stylesheet" href="/assets/css/app.css">
 </head>
-<body>
+<body class="page-login">
 <div class="login-page">
-    <div class="login-card" style="max-width:480px">
-        <h1><?= htmlspecialchars($config['app']['name'] ?? 'REC') ?></h1>
-        <p class="text-center text-muted">إعداد لمرة واحدة — إنشاء مسؤول النظام</p>
+    <div class="login-panel">
+        <div class="login-panel__brand">
+            <div class="login-logo" aria-hidden="true">REC</div>
+            <h1 class="login-panel__title"><?= $appName ?></h1>
+            <p class="login-panel__subtitle">إعداد لمرة واحدة — إنشاء مسؤول النظام</p>
+        </div>
+
+        <div class="login-card" style="max-width:480px">
+            <div class="login-card__header">
+                <h2>إعداد النظام</h2>
+                <p>إنشاء حساب مسؤول النظام الأول</p>
+            </div>
 
         <?php if ($error): ?>
-            <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
+            <div class="login-alert login-alert--error" role="alert">
+                <span class="login-alert__icon" aria-hidden="true">!</span>
+                <span><?= htmlspecialchars($error) ?></span>
+            </div>
             <?php if ($config['app']['debug'] ?? false): ?>
                 <pre style="font-size:0.8rem;overflow:auto"><?= htmlspecialchars(json_encode(testDatabaseConnection(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
             <?php endif; ?>
         <?php endif; ?>
 
         <?php if ($success): ?>
-            <div class="alert alert-success">
-                تم إنشاء حساب مسؤول النظام بنجاح.<br>
-                <strong>عطّل SETUP_ENABLED فوراً (اجعله false).</strong>
+            <div class="login-alert login-alert--success" role="alert">
+                <span class="login-alert__icon" aria-hidden="true">✓</span>
+                <span>تم إنشاء حساب مسؤول النظام. <strong>عطّل SETUP_ENABLED فوراً.</strong></span>
             </div>
-            <a href="<?= htmlspecialchars($loginUrl) ?>" class="btn" style="width:100%;text-align:center">الذهاب لتسجيل الدخول</a>
+            <a href="<?= htmlspecialchars($loginUrl) ?>" class="btn btn-login" style="display:block;text-align:center;text-decoration:none">الذهاب لتسجيل الدخول</a>
         <?php elseif ($userCount > 0): ?>
-            <div class="alert alert-success">النظام مُثبَّت مسبقاً (<?= $userCount ?> مستخدم).</div>
-            <p class="text-muted">عطّل <code>SETUP_ENABLED</code> لأسباب أمنية.</p>
-            <a href="<?= htmlspecialchars($loginUrl) ?>" class="btn" style="width:100%;text-align:center">تسجيل الدخول</a>
+            <div class="login-alert login-alert--success" role="alert">
+                <span class="login-alert__icon" aria-hidden="true">✓</span>
+                <span>النظام مُثبَّت مسبقاً (<?= $userCount ?> مستخدم). عطّل SETUP_ENABLED.</span>
+            </div>
+            <a href="<?= htmlspecialchars($loginUrl) ?>" class="btn btn-login" style="display:block;text-align:center;text-decoration:none">تسجيل الدخول</a>
         <?php else: ?>
-            <form method="post">
+            <form method="post" class="login-form">
                 <div class="form-group">
                     <label>اسم مسؤول النظام</label>
                     <input type="text" name="name" class="form-control" required>
@@ -121,12 +140,19 @@ $loginUrl = rtrim($config['app']['url'] ?? '', '/') . '/login';
                 </div>
                 <div class="form-group">
                     <label>كلمة المرور (8 أحرف على الأقل)</label>
-                    <input type="password" name="password" class="form-control" minlength="8" required>
+                    <div class="password-field">
+                        <input type="password" name="password" class="form-control" minlength="8" required data-password-input>
+                        <button type="button" class="password-field__toggle" data-password-toggle aria-label="إظهار كلمة المرور">👁</button>
+                    </div>
                 </div>
-                <button type="submit" class="btn" style="width:100%">إنشاء حساب المسؤول</button>
+                <button type="submit" class="btn btn-login">إنشاء حساب المسؤول</button>
             </form>
         <?php endif; ?>
+        </div>
+
+        <p class="login-footer">جمعية مركز الإرشاد التربوي — جميع الحقوق محفوظة</p>
     </div>
 </div>
+<script src="/assets/js/ui.js"></script>
 </body>
 </html>

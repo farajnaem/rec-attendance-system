@@ -4,53 +4,68 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($title ?? config('app.name')) ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="<?= e(asset('/assets/css/shell.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset('/assets/css/app.css')) ?>">
 </head>
-<body>
+<body class="<?= ($page ?? '') === 'login' ? 'page-login' : (Auth::check() ? 'app-shell' : '') ?>">
 <?php if (Auth::check() && ($page ?? '') !== 'login'): ?>
-<nav class="navbar no-print">
-    <div class="navbar-brand">
-        <strong><?= e(config('app.name')) ?></strong>
-        <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="main-nav" aria-label="فتح القائمة">☰</button>
-    </div>
-    <div class="navbar-links" id="main-nav">
-        <a href="<?= e(url('/employee/dashboard')) ?>">لوحتي</a>
-        <?php if (Auth::can('sign_attendance')): ?>
-        <a href="<?= e(url('/employee/dashboard')) ?>#attendance">تسجيل الحضور</a>
-        <?php endif; ?>
-        <a href="<?= e(url('/employee/report')) ?>">تقريري الشهري</a>
-        <a href="<?= e(url('/employee/dashboard')) ?>#job-description">التوصيف الوظيفي</a>
-        <?php if (!RoleHelper::isEmployee(Auth::role())): ?>
-            <a href="<?= e(url('/manager/dashboard')) ?>">لوحة التحكم</a>
-            <?php if (Auth::can('manage_users')): ?>
-            <a href="<?= e(url('/manager/users')) ?>">المستخدمون</a>
-            <?php endif; ?>
-            <?php if (Auth::can('manage_departments')): ?>
-            <a href="<?= e(url('/manager/departments')) ?>">الدوائر</a>
-            <?php endif; ?>
-            <?php if (RoleHelper::isOrgAdmin(Auth::role())): ?>
-            <a href="<?= e(url('/manager/work-schedule')) ?>">ساعات الدوام</a>
-            <?php endif; ?>
-            <?php if (Auth::can('manage_locations')): ?>
-            <a href="<?= e(url('/manager/locations')) ?>">مواقع العمل</a>
-            <?php endif; ?>
-            <?php if (Auth::can('manage_job_description')): ?>
-            <a href="<?= e(url('/manager/job-description')) ?>">إدارة التوصيف</a>
-            <?php endif; ?>
-            <?php if (Auth::can('manage_daily_tasks')): ?>
-            <a href="<?= e(url('/manager/tasks')) ?>">المهام</a>
-            <?php endif; ?>
-            <?php if (Auth::can('view_reports_readonly') || Auth::can('monthly_employee_report')): ?>
-            <a href="<?= e(url('/manager/reports')) ?>">التقارير</a>
-            <a href="<?= e(url('/manager/attendance')) ?>">حضور الفريق</a>
-            <?php endif; ?>
-        <?php endif; ?>
-        <a href="<?= e(url('/logout')) ?>" class="nav-logout">خروج (<?= e(Auth::name()) ?>)</a>
-    </div>
-</nav>
-<?php endif; ?>
+<div class="rd-app" data-rd-nav>
+    <div class="rd-sidebar-backdrop" data-rd-nav-backdrop aria-hidden="true"></div>
 
-<div class="<?= ($page ?? '') === 'login' ? '' : 'container' ?>">
+    <aside class="rd-sidebar" data-rd-nav-panel id="rd-sidebar">
+        <a class="rd-sidebar-brand" href="<?= e(url(RoleHelper::dashboardPath(Auth::role()))) ?>">
+            <span class="rd-sidebar-brand-mark">REC</span>
+            <span>
+                <div class="rd-sidebar-brand-title"><?= e(config('app.name')) ?></div>
+                <div class="rd-sidebar-brand-tagline">نظام الحضور والمهام</div>
+            </span>
+        </a>
+
+        <?php require __DIR__ . '/partials/sidebar_nav.php'; ?>
+    </aside>
+
+    <div class="rd-main">
+        <header class="rd-topbar no-print">
+            <div class="rd-topbar-start">
+                <button
+                    type="button"
+                    class="rd-menu-btn"
+                    data-rd-nav-toggle
+                    aria-controls="rd-sidebar"
+                    aria-expanded="false"
+                    aria-label="فتح القائمة"
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+            </div>
+            <div class="rd-topbar-meta">
+                <?php require __DIR__ . '/partials/user_menu.php'; ?>
+            </div>
+        </header>
+
+        <main class="rd-content">
+            <?php if ($success = flash('success')): ?>
+                <div class="alert alert-success"><?= e($success) ?></div>
+            <?php endif; ?>
+            <?php if ($error = flash('error')): ?>
+                <div class="alert alert-error"><?= e($error) ?></div>
+            <?php endif; ?>
+
+            <?php require __DIR__ . '/partials/breadcrumbs.php'; ?>
+
+            <?php require __DIR__ . '/' . ($name ?? 'login') . '.php'; ?>
+        </main>
+    </div>
+</div>
+<script src="<?= e(asset('/assets/js/nav-toggle.js')) ?>"></script>
+<script src="<?= e(asset('/assets/js/ui.js')) ?>"></script>
+<?php elseif (($page ?? '') === 'login'): ?>
+    <?php require __DIR__ . '/' . ($name ?? 'login') . '.php'; ?>
+<?php else: ?>
+<div class="container">
     <?php if ($success = flash('success')): ?>
         <div class="alert alert-success"><?= e($success) ?></div>
     <?php endif; ?>
@@ -60,22 +75,10 @@
 
     <?php require __DIR__ . '/' . ($name ?? 'login') . '.php'; ?>
 </div>
+<?php endif; ?>
 
 <?php if (!empty($loadSignature)): ?>
 <script src="<?= e(asset('/assets/js/signature.js')) ?>"></script>
-<?php endif; ?>
-<?php if (Auth::check() && ($page ?? '') !== 'login'): ?>
-<script>
-(function () {
-    var btn = document.querySelector('.nav-toggle');
-    var nav = document.getElementById('main-nav');
-    if (!btn || !nav) return;
-    btn.addEventListener('click', function () {
-        var open = nav.classList.toggle('is-open');
-        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-})();
-</script>
 <?php endif; ?>
 </body>
 </html>

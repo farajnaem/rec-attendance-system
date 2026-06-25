@@ -656,6 +656,91 @@ try {
             redirect('/manager/work-schedule');
         })(),
 
+        $route === '/manager/database' && $method === 'GET' => (function () {
+            Auth::requireRole(['system_admin']);
+            require dirname(__DIR__) . '/database/DataSync.php';
+            $driverLabel = DataSync::driverLabel();
+            try {
+                $preview = DataSync::exportCurrent();
+                $stats = $preview['stats'] ?? [];
+            } catch (Throwable $e) {
+                flash('error', 'تعذّر قراءة قاعدة البيانات: ' . $e->getMessage());
+                $stats = [];
+            }
+            $maxUploadMb = 25;
+            view('manager/database', compact('driverLabel', 'stats', 'maxUploadMb'));
+        })(),
+
+        $route === '/manager/database/export' && $method === 'GET' => (function () {
+            Auth::requireRole(['system_admin']);
+            require dirname(__DIR__) . '/database/DataSync.php';
+            try {
+                $payload = DataSync::exportCurrent();
+                $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+                if ($json === false) {
+                    throw new RuntimeException('تعذّر تحويل البيانات إلى JSON.');
+                }
+                $filename = 'rec-export-' . date('Y-m-d-His') . '.json';
+                header('Content-Type: application/json; charset=utf-8');
+                header('Content-Disposition: attachment; filename="' . $filename . '"');
+                header('Cache-Control: no-store');
+                echo $json;
+                exit;
+            } catch (Throwable $e) {
+                flash('error', 'فشل التصدير: ' . $e->getMessage());
+                redirect('/manager/database');
+            }
+        })(),
+
+        $route === '/manager/database/import' && $method === 'POST' => (function () {
+            Auth::requireRole(['system_admin']);
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/manager/database');
+            }
+
+            require dirname(__DIR__) . '/database/DataSync.php';
+
+            $maxBytes = 25 * 1024 * 1024;
+            $file = $_FILES['import_file'] ?? null;
+            if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                flash('error', 'يرجى اختيار ملف JSON صالح.');
+                redirect('/manager/database');
+            }
+            if (($file['size'] ?? 0) > $maxBytes) {
+                flash('error', 'حجم الملف أكبر من 25 ميجابايت.');
+                redirect('/manager/database');
+            }
+
+            $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+            if ($ext !== 'json') {
+                flash('error', 'يجب أن يكون الملف بصيغة .json');
+                redirect('/manager/database');
+            }
+
+            $mode = ($_POST['import_mode'] ?? 'replace') === 'merge' ? 'merge' : 'replace';
+            if ($mode === 'replace') {
+                if (trim($_POST['confirm_text'] ?? '') !== 'استبدال') {
+                    flash('error', 'اكتب «استبدال» للتأكيد على الاستبدال الكامل.');
+                    redirect('/manager/database');
+                }
+            }
+            if (empty($_POST['confirm_ack'])) {
+                flash('error', 'يجب تأكيد فهمك لخطورة العملية.');
+                redirect('/manager/database');
+            }
+
+            try {
+                $payload = DataSync::loadExport((string) $file['tmp_name']);
+                $summary = DataSync::importCurrent($payload, $mode === 'replace');
+                $total = array_sum($summary['imported']);
+                flash('success', 'تم الاستيراد بنجاح — ' . $total . ' سجل في ' . count($summary['imported']) . ' جدول.');
+            } catch (Throwable $e) {
+                flash('error', 'فشل الاستيراد: ' . $e->getMessage());
+            }
+            redirect('/manager/database');
+        })(),
+
         $route === '/manager/locations' && $method === 'GET' => (function () {
             Auth::requirePermission('manage_locations');
             $locations = LocationService::all(false);
