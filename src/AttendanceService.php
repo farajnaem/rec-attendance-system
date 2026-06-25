@@ -34,14 +34,23 @@ class AttendanceService
         ];
     }
 
-    public static function sign(int $userId, string $type, string $signatureData, string $timezone, string $ip): void
-    {
+    public static function sign(
+        int $userId,
+        string $type,
+        string $signatureData,
+        string $timezone,
+        string $ip,
+        ?float $latitude = null,
+        ?float $longitude = null
+    ): void {
         if (!in_array($type, ['check_in', 'check_out'], true)) {
             throw new InvalidArgumentException('نوع التوقيع غير صالح.');
         }
         if (strlen($signatureData) < 100) {
             throw new InvalidArgumentException('يرجى التوقيع الإلكتروني قبل الإرسال.');
         }
+
+        $location = LocationService::validateSignCoordinates($latitude, $longitude);
 
         $utcNow = TimezoneHelper::utcNow();
         $localDate = TimezoneHelper::localWorkDate($utcNow, $timezone);
@@ -66,8 +75,10 @@ class AttendanceService
         }
 
         $stmt = $pdo->prepare(
-            'INSERT INTO attendance_records (user_id, type, signed_at_utc, local_work_date, timezone, signature_data, ip_address)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO attendance_records
+             (user_id, type, signed_at_utc, local_work_date, timezone, signature_data, ip_address,
+              latitude, longitude, work_location_id, work_location_name)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $userId,
@@ -77,36 +88,58 @@ class AttendanceService
             $timezone,
             $signatureData,
             $ip,
+            $latitude,
+            $longitude,
+            $location['location_id'],
+            $location['location_name'],
         ]);
     }
 
     public static function recent(int $userId, int $days = 7): array
     {
         $pdo = Database::getConnection();
-        $stmt = $pdo->prepare(
-            'SELECT * FROM attendance_records WHERE user_id = ?
-             AND local_work_date >= date("now", ?)
-             ORDER BY local_work_date DESC, signed_at_utc DESC'
-        );
-        $stmt->execute([$userId, '-' . $days . ' days']);
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->prepare(
+                'SELECT * FROM attendance_records WHERE user_id = ?
+                 AND local_work_date >= date("now", ?)
+                 ORDER BY local_work_date DESC, signed_at_utc DESC'
+            );
+            $stmt->execute([$userId, '-' . $days . ' days']);
+        } else {
+            $stmt = $pdo->prepare(
+                'SELECT * FROM attendance_records WHERE user_id = ?
+                 AND local_work_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+                 ORDER BY local_work_date DESC, signed_at_utc DESC'
+            );
+            $stmt->execute([$userId, $days]);
+        }
 
         return $stmt->fetchAll();
     }
 
-    public static function teamAttendance(int $managerId, string $date): array
+    public static function teamAttendanceForActor(int $actorId, string $actorRole, string $date): array
     {
+        $staff = ScopeService::visibleStaff($actorId, $actorRole);
+        if (empty($staff)) {
+            return [];
+        }
+        $ids = array_column($staff, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $pdo = Database::getConnection();
+        $params = array_merge([$date], $ids);
         $stmt = $pdo->prepare(
-            'SELECT u.id, u.name, u.timezone,
-                    MAX(CASE WHEN a.type = "check_in" THEN a.signed_at_utc END) AS check_in_utc,
-                    MAX(CASE WHEN a.type = "check_out" THEN a.signed_at_utc END) AS check_out_utc
+            "SELECT u.id, u.name, u.timezone, u.role,
+                    MAX(CASE WHEN a.type = 'check_in' THEN a.signed_at_utc END) AS check_in_utc,
+                    MAX(CASE WHEN a.type = 'check_out' THEN a.signed_at_utc END) AS check_out_utc,
+                    MAX(CASE WHEN a.type = 'check_in' THEN a.work_location_name END) AS work_location_name
              FROM users u
              LEFT JOIN attendance_records a ON a.user_id = u.id AND a.local_work_date = ?
-             WHERE u.manager_id = ? AND u.role = "employee" AND u.is_active = 1
-             GROUP BY u.id, u.name, u.timezone
-             ORDER BY u.name'
+             WHERE u.id IN ($placeholders) AND u.is_active = 1
+             GROUP BY u.id, u.name, u.timezone, u.role
+             ORDER BY u.name"
         );
-        $stmt->execute([$date, $managerId]);
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 }

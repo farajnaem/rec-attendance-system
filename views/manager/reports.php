@@ -9,7 +9,9 @@ $months = [1=>'يناير',2=>'فبراير',3=>'مارس',4=>'أبريل',5=>'�
         <label>الموظف</label>
         <select name="employee_id" class="form-control">
             <?php foreach ($employees as $emp): ?>
-            <option value="<?= (int)$emp['id'] ?>" <?= $employeeId === (int)$emp['id'] ? 'selected' : '' ?>><?= e($emp['name']) ?></option>
+            <option value="<?= (int)$emp['id'] ?>" <?= $employeeId === (int)$emp['id'] ? 'selected' : '' ?>>
+                <?= e($emp['name']) ?> (<?= e(RoleHelper::label($emp['role'] ?? 'employee')) ?>)
+            </option>
             <?php endforeach; ?>
         </select>
     </div>

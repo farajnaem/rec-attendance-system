@@ -93,7 +93,16 @@ if (!function_exists('resolveDatabaseConfig')) {
 
         $db = [
             'driver' => $driver,
-            'sqlite_path' => env('DB_SQLITE_PATH', dirname(__DIR__) . '/database/attendance.sqlite'),
+            'sqlite_path' => (static function (): string {
+                $path = env('DB_SQLITE_PATH', dirname(__DIR__) . '/database/attendance.sqlite');
+                if ($path === null || $path === '') {
+                    return dirname(__DIR__) . '/database/attendance.sqlite';
+                }
+                if (!preg_match('~^([A-Za-z]:)?[/\\\\]~', $path)) {
+                    return dirname(__DIR__) . '/' . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($path, '/\\'));
+                }
+                return $path;
+            })(),
             'host' => env('DB_HOST', 'localhost'),
             'port' => (int) env('DB_PORT', '3306'),
             'name' => env('DB_NAME', 'rec_attendance'),
@@ -123,7 +132,7 @@ if (!function_exists('app_config')) {
                     'name' => env('APP_NAME', 'جمعية مركز الإرشاد التربوي REC'),
                     'url' => rtrim(env('APP_URL', 'http://localhost:8080'), '/'),
                     'base_path' => env('APP_BASE_PATH', ''),
-                    'default_timezone' => env('APP_TIMEZONE', 'Asia/Riyadh'),
+                    'default_timezone' => env('APP_TIMEZONE', 'Asia/Jerusalem'),
                     'debug' => envBool('APP_DEBUG', false),
                     'setup_enabled' => envBool('SETUP_ENABLED', false),
                 ],

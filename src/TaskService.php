@@ -76,6 +76,35 @@ class TaskService
         return $stmt->fetchAll();
     }
 
+    public static function forStaffIds(array $staffIds, ?string $from = null, ?string $to = null): array
+    {
+        $staffIds = array_values(array_filter(array_map('intval', $staffIds)));
+        if (empty($staffIds)) {
+            return [];
+        }
+        $pdo = Database::getConnection();
+        $placeholders = implode(',', array_fill(0, count($staffIds), '?'));
+        $sql = "SELECT t.*, e.name AS employee_name, tc.completed_at_utc, te.score
+                FROM daily_tasks t
+                JOIN users e ON e.id = t.employee_id
+                LEFT JOIN task_completions tc ON tc.task_id = t.id
+                LEFT JOIN task_evaluations te ON te.task_id = t.id
+                WHERE t.employee_id IN ($placeholders)";
+        $params = $staffIds;
+        if ($from) {
+            $sql .= ' AND t.task_date >= ?';
+            $params[] = $from;
+        }
+        if ($to) {
+            $sql .= ' AND t.task_date <= ?';
+            $params[] = $to;
+        }
+        $sql .= ' ORDER BY t.task_date DESC, t.id DESC';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     public static function complete(int $taskId, int $completedBy, string $localDatetime, string $timezone, ?string $notes): void
     {
         $task = self::getById($taskId);
@@ -146,18 +175,18 @@ class TaskService
         if (!$task) {
             return false;
         }
-        if ($role === 'admin') {
+        $role = RoleHelper::normalizeRole($role);
+        if ($role === 'system_admin') {
             return true;
         }
-        if ($role === 'employee' && (int) $task['employee_id'] === $userId) {
+        if ((int) $task['employee_id'] === $userId) {
             return true;
         }
-        if (in_array($role, ['manager', 'dept_manager', 'admin'], true)) {
-            $pdo = Database::getConnection();
-            $stmt = $pdo->prepare('SELECT manager_id FROM users WHERE id = ?');
-            $stmt->execute([$task['employee_id']]);
-            $emp = $stmt->fetch();
-            return $emp && (int) $emp['manager_id'] === $userId;
+        if (in_array($role, ['director', 'program_supervisor', 'admin_assistant'], true)) {
+            return ScopeService::canViewUser($userId, $role, (int) $task['employee_id']);
+        }
+        if ($role === 'employee') {
+            return (int) $task['employee_id'] === $userId;
         }
         return false;
     }

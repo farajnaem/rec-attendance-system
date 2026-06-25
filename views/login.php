@@ -15,5 +15,10 @@
             </div>
             <button type="submit" class="btn" style="width:100%">دخول</button>
         </form>
+        <?php if (!empty($setupEnabled)): ?>
+            <p class="text-center text-muted" style="margin-top:1rem;font-size:0.9rem">
+                أول مرة؟ <a href="<?= e(url('/setup.php')) ?>">إنشاء حساب مسؤول النظام</a>
+            </p>
+        <?php endif; ?>
     </div>
 </div>

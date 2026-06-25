@@ -29,14 +29,22 @@ if (!($config['app']['setup_enabled'] ?? false)) {
 }
 
 require dirname(__DIR__) . '/src/Database.php';
+require dirname(__DIR__) . '/src/PermissionService.php';
+require dirname(__DIR__) . '/src/MigrationRunner.php';
 require dirname(__DIR__) . '/src/RoleHelper.php';
 require dirname(__DIR__) . '/src/DbDiagnostics.php';
 
 $error = null;
 $success = null;
 
+if (!empty($_SESSION['flash']['error'])) {
+    $error = (string) $_SESSION['flash']['error'];
+    unset($_SESSION['flash']['error']);
+}
+
 try {
     $pdo = Database::getConnection();
+    MigrationRunner::ensureLatest();
     $pdo->query('SELECT 1 FROM users LIMIT 1');
 } catch (Throwable $e) {
     $error = 'تعذّر الاتصال بقاعدة البيانات. تأكد من DATABASE_URL أو متغيرات DB_*.';
@@ -61,7 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error && $userCount === 0) {
         $hash = password_hash($password, PASSWORD_BCRYPT);
         $pdo->prepare(
             'INSERT INTO users (name, email, password_hash, role, timezone) VALUES (?, ?, ?, ?, ?)'
-        )->execute([$name, $email, $hash, 'admin', $config['app']['default_timezone'] ?? 'Asia/Riyadh']);
+        )->execute([$name, $email, $hash, 'system_admin', $config['app']['default_timezone'] ?? 'Asia/Riyadh']);
+        $adminId = (int) $pdo->lastInsertId();
+        PermissionService::grantDefaults($adminId, 'system_admin');
         $success = true;
     }
 }

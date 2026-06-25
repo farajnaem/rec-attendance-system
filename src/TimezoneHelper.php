@@ -35,14 +35,19 @@ class TimezoneHelper
     public static function commonTimezones(): array
     {
         return [
-            'Asia/Riyadh' => 'الرياض (GMT+3)',
-            'Asia/Damascus' => 'دمشق (GMT+3)',
-            'Africa/Cairo' => 'القاهرة (GMT+2)',
-            'Asia/Dubai' => 'دبي (GMT+4)',
-            'Asia/Kuwait' => 'الكويت (GMT+3)',
-            'Asia/Amman' => 'عمّان (GMT+3)',
-            'Asia/Baghdad' => 'بغداد (GMT+3)',
-            'UTC' => 'UTC',
+            'Asia/Jerusalem' => 'القدس',
+            'Asia/Gaza' => 'غزة',
+            'Europe/Rome' => 'إيطاليا',
         ];
+    }
+
+    public static function isValid(string $timezone): bool
+    {
+        return isset(self::commonTimezones()[$timezone]);
+    }
+
+    public static function defaultTimezone(): string
+    {
+        return 'Asia/Jerusalem';
     }
 }
