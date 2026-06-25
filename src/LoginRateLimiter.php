@@ -18,21 +18,25 @@ class LoginRateLimiter
             return self::sessionTooMany($email);
         }
 
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare(
-            'SELECT attempts, locked_until FROM login_attempts WHERE attempt_key = ? LIMIT 1'
-        );
-        $stmt->execute([self::key($email)]);
-        $row = $stmt->fetch();
-        if (!$row) {
-            return false;
-        }
+        try {
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare(
+                'SELECT attempts, locked_until FROM login_attempts WHERE attempt_key = ? LIMIT 1'
+            );
+            $stmt->execute([self::key($email)]);
+            $row = $stmt->fetch();
+            if (!$row) {
+                return false;
+            }
 
-        if (!empty($row['locked_until']) && strtotime((string) $row['locked_until']) > time()) {
-            return true;
-        }
+            if (!empty($row['locked_until']) && strtotime((string) $row['locked_until']) > time()) {
+                return true;
+            }
 
-        return (int) $row['attempts'] >= self::MAX_ATTEMPTS;
+            return (int) $row['attempts'] >= self::MAX_ATTEMPTS;
+        } catch (Throwable) {
+            return self::sessionTooMany($email);
+        }
     }
 
     public static function hit(string $email): void
@@ -42,32 +46,40 @@ class LoginRateLimiter
             return;
         }
 
-        $key = self::key($email);
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare('SELECT attempts FROM login_attempts WHERE attempt_key = ? LIMIT 1');
-        $stmt->execute([$key]);
-        $row = $stmt->fetch();
-        $attempts = $row ? (int) $row['attempts'] + 1 : 1;
-        $lockedUntil = $attempts >= self::MAX_ATTEMPTS
-            ? date('Y-m-d H:i:s', time() + self::LOCK_MINUTES * 60)
-            : null;
+        try {
+            $key = self::key($email);
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare('SELECT attempts FROM login_attempts WHERE attempt_key = ? LIMIT 1');
+            $stmt->execute([$key]);
+            $row = $stmt->fetch();
+            $attempts = $row ? (int) $row['attempts'] + 1 : 1;
+            $lockedUntil = $attempts >= self::MAX_ATTEMPTS
+                ? date('Y-m-d H:i:s', time() + self::LOCK_MINUTES * 60)
+                : null;
 
-        if ($row) {
-            $pdo->prepare(
-                'UPDATE login_attempts SET attempts = ?, locked_until = ?, updated_at = CURRENT_TIMESTAMP WHERE attempt_key = ?'
-            )->execute([$attempts, $lockedUntil, $key]);
-        } else {
-            $pdo->prepare(
-                'INSERT INTO login_attempts (attempt_key, attempts, locked_until) VALUES (?, ?, ?)'
-            )->execute([$key, $attempts, $lockedUntil]);
+            if ($row) {
+                $pdo->prepare(
+                    'UPDATE login_attempts SET attempts = ?, locked_until = ?, updated_at = CURRENT_TIMESTAMP WHERE attempt_key = ?'
+                )->execute([$attempts, $lockedUntil, $key]);
+            } else {
+                $pdo->prepare(
+                    'INSERT INTO login_attempts (attempt_key, attempts, locked_until) VALUES (?, ?, ?)'
+                )->execute([$key, $attempts, $lockedUntil]);
+            }
+        } catch (Throwable) {
+            self::sessionHit($email);
         }
     }
 
     public static function clear(string $email): void
     {
         if (self::tableExists()) {
-            $pdo = Database::getConnection();
-            $pdo->prepare('DELETE FROM login_attempts WHERE attempt_key = ?')->execute([self::key($email)]);
+            try {
+                $pdo = Database::getConnection();
+                $pdo->prepare('DELETE FROM login_attempts WHERE attempt_key = ?')->execute([self::key($email)]);
+            } catch (Throwable) {
+                // ignore — session fallback below
+            }
         }
         unset($_SESSION['login_attempts'][self::key($email)]);
     }

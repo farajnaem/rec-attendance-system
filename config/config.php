@@ -62,28 +62,44 @@ if (!function_exists('parseDatabaseUrl')) {
             return null;
         }
 
-        $parsed = parse_url(trim($url));
-        if ($parsed === false || !isset($parsed['host'])) {
+        $url = trim($url);
+        if (!preg_match('#^mysql(?:\+mysqli)?://#i', $url)) {
             return null;
         }
 
-        $scheme = strtolower($parsed['scheme'] ?? '');
-        if (!in_array($scheme, ['mysql', 'mysqli'], true)) {
+        $remainder = preg_replace('#^mysql(?:\+mysqli)?://#i', '', $url);
+        $atPos = strrpos($remainder, '@');
+        if ($atPos === false) {
             return null;
         }
 
-        $database = isset($parsed['path']) ? ltrim($parsed['path'], '/') : '';
+        $userinfo = substr($remainder, 0, $atPos);
+        $hostpart = substr($remainder, $atPos + 1);
+        $colonPos = strpos($userinfo, ':');
+        if ($colonPos === false) {
+            $user = rawurldecode($userinfo);
+            $pass = '';
+        } else {
+            $user = rawurldecode(substr($userinfo, 0, $colonPos));
+            $pass = rawurldecode(substr($userinfo, $colonPos + 1));
+        }
+
+        if (!preg_match('#^([^:/]+)(?::(\d+))?/([^?]+)#', $hostpart, $matches)) {
+            return null;
+        }
+
+        $database = rawurldecode($matches[3]);
         if ($database === '') {
             $database = 'default';
         }
 
         return [
             'driver' => 'mysql',
-            'host' => $parsed['host'],
-            'port' => isset($parsed['port']) ? (int) $parsed['port'] : 3306,
-            'name' => rawurldecode($database),
-            'user' => isset($parsed['user']) ? rawurldecode((string) $parsed['user']) : '',
-            'pass' => isset($parsed['pass']) ? rawurldecode((string) $parsed['pass']) : '',
+            'host' => $matches[1],
+            'port' => isset($matches[2]) ? (int) $matches[2] : 3306,
+            'name' => $database,
+            'user' => $user,
+            'pass' => $pass,
             'charset' => 'utf8mb4',
         ];
     }
@@ -135,16 +151,16 @@ if (!function_exists('resolveDatabaseConfig')) {
             'charset' => 'utf8mb4',
         ];
 
-        // الأولوية: DATABASE_URL (Coolify) ثم MYSQL_URL ثم متغيرات MYSQL_* ثم DB_*
+        // Coolify: متغيرات MYSQL_* أوثق من DATABASE_URL (كلمات مرور فيها @ أو :)
+        $fromMysql = resolveFromMysqlEnv();
+        if ($fromMysql !== null) {
+            return array_merge($db, $fromMysql);
+        }
+
         $dbUrl = env('DATABASE_URL') ?? env('MYSQL_URL') ?? env('DB_URL');
         $fromUrl = parseDatabaseUrl($dbUrl);
         if ($fromUrl !== null) {
             return array_merge($db, $fromUrl);
-        }
-
-        $fromMysql = resolveFromMysqlEnv();
-        if ($fromMysql !== null) {
-            return array_merge($db, $fromMysql);
         }
 
         if ($db['driver'] === 'sqlite') {

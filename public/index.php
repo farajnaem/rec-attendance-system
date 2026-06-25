@@ -71,45 +71,61 @@ try {
         })(),
 
         $route === '/login' && $method === 'POST' => (function () {
-            if (Auth::needsSetup()) {
-                flash('error', 'يجب إنشاء حساب المسؤول من صفحة الإعداد أولاً.');
-                redirect('/setup.php');
-            }
-            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
-                flash('error', 'انتهت صلاحية النموذج. أعد المحاولة.');
+            try {
+                if (Auth::needsSetup()) {
+                    flash('error', 'يجب إنشاء حساب المسؤول من صفحة الإعداد أولاً.');
+                    redirect('/setup.php');
+                }
+                if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                    flash('error', 'انتهت صلاحية النموذج. أعد المحاولة.');
+                    redirect('/login');
+                }
+                $email = strtolower(trim($_POST['email'] ?? ''));
+                $password = $_POST['password'] ?? '';
+                if (LoginRateLimiter::tooManyAttempts($email)) {
+                    flash('error', LoginRateLimiter::lockMessage());
+                    redirect('/login');
+                }
+                if (Auth::attempt($email, $password)) {
+                    LoginRateLimiter::clear($email);
+                    redirect(RoleHelper::dashboardPath(Auth::role()));
+                }
+                LoginRateLimiter::hit($email);
+                AuditService::log('login.failed', 'user', null, ['email' => $email], null);
+                flash('error', 'البريد أو كلمة المرور غير صحيحة.');
+                redirect('/login');
+            } catch (PDOException $e) {
+                error_log('Login database error: ' . $e->getMessage());
+                $message = config('app.debug')
+                    ? 'خطأ قاعدة البيانات: ' . $e->getMessage()
+                    : 'تعذّر الاتصال بقاعدة البيانات. تحقق من إعدادات MySQL في Coolify أو افتح /health';
+                flash('error', $message);
                 redirect('/login');
             }
-            $email = strtolower(trim($_POST['email'] ?? ''));
-            $password = $_POST['password'] ?? '';
-            if (LoginRateLimiter::tooManyAttempts($email)) {
-                flash('error', LoginRateLimiter::lockMessage());
-                redirect('/login');
-            }
-            if (Auth::attempt($email, $password)) {
-                LoginRateLimiter::clear($email);
-                redirect(RoleHelper::dashboardPath(Auth::role()));
-            }
-            LoginRateLimiter::hit($email);
-            AuditService::log('login.failed', 'user', null, ['email' => $email], null);
-            flash('error', 'البريد أو كلمة المرور غير صحيحة.');
-            redirect('/login');
         })(),
 
         $route === '/health' && $method === 'GET' => (function () {
             header('Content-Type: application/json');
-            $payload = ['status' => 'ok', 'db' => 'unknown'];
+            $payload = [
+                'status' => 'ok',
+                'db' => 'unknown',
+                'db_source' => dbConnectionSource(),
+            ];
 
             try {
-                Database::getConnection()->query('SELECT 1');
+                $pdo = Database::getConnection();
+                $pdo->query('SELECT 1');
                 $payload['db'] = 'connected';
+                $payload['users'] = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
             } catch (Throwable $e) {
+                $payload['status'] = 'degraded';
                 $payload['db'] = 'failed';
                 if (config('app.debug')) {
                     $payload['db_error'] = $e->getMessage();
                 }
             }
 
-            echo json_encode($payload);
+            echo json_encode($payload, JSON_UNESCAPED_UNICODE);
         })(),
 
         $route === '/debug/db' && $method === 'GET' => (function () {

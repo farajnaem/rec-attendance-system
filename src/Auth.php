@@ -23,7 +23,11 @@ class Auth
         $_SESSION['user_role'] = RoleHelper::normalizeRole($user['role']);
         $_SESSION['user_timezone'] = $user['timezone'];
 
-        PermissionService::loadPermissionsToSession((int) $user['id'], (string) $user['role']);
+        try {
+            PermissionService::loadPermissionsToSession((int) $user['id'], (string) $user['role']);
+        } catch (Throwable) {
+            $_SESSION['permissions'] = PermissionService::defaultCodesForRole((string) $user['role']);
+        }
 
         AuditService::log('login', 'user', (int) $user['id']);
 
@@ -50,7 +54,11 @@ class Auth
         $_SESSION['user_email'] = $user['email'];
         $_SESSION['user_role'] = RoleHelper::normalizeRole((string) $user['role']);
         $_SESSION['user_timezone'] = $user['timezone'];
-        PermissionService::loadPermissionsToSession((int) $user['id'], (string) $user['role']);
+        try {
+            PermissionService::loadPermissionsToSession((int) $user['id'], (string) $user['role']);
+        } catch (Throwable) {
+            $_SESSION['permissions'] = PermissionService::defaultCodesForRole((string) $user['role']);
+        }
 
         return true;
     }
