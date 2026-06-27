@@ -127,9 +127,15 @@ class UserService
 
     public static function assertCanEdit(int $userId, int $actorId, string $actorRole): void
     {
-        if (!ScopeService::canViewUser($actorId, $actorRole, $userId)) {
-            throw new RuntimeException('لا يمكنك تعديل هذا المستخدم.');
+        if (PermissionService::hasFullUserManagement($actorId)
+            && ScopeService::canViewUser($actorId, $actorRole, $userId)) {
+            return;
         }
+        if (PermissionService::can($actorId, 'edit_department_users')
+            && ScopeService::canManageDepartmentUser($actorId, $actorRole, $userId)) {
+            return;
+        }
+        throw new RuntimeException('لا يمكنك تعديل هذا المستخدم.');
     }
 
     public static function update(
@@ -188,6 +194,16 @@ class UserService
         }
 
         if ($departmentId) {
+            $canFullManage = PermissionService::hasFullUserManagement($actorId);
+            if (!$canFullManage) {
+                $current = DepartmentService::currentForUser($userId);
+                if ($current && (int) $current['id'] !== $departmentId) {
+                    throw new RuntimeException('لا يمكنك نقل الموظف إلى دائرة أخرى.');
+                }
+                if (!$current && !ScopeService::isInSupervisedDepartment($actorId, $userId)) {
+                    throw new RuntimeException('لا يمكنك تعيين دائرة خارج نطاقك.');
+                }
+            }
             $current = DepartmentService::currentForUser($userId);
             if (!$current || (int) $current['id'] !== $departmentId) {
                 DepartmentService::assignUser($userId, $departmentId, $actorId);
@@ -247,6 +263,9 @@ class UserService
 
     public static function toggleActive(int $userId, int $actorId, string $actorRole): void
     {
+        if (!PermissionService::hasFullUserManagement($actorId)) {
+            throw new RuntimeException('تعطيل الموظفين متاح للمدير فقط.');
+        }
         if ($userId === $actorId) {
             throw new RuntimeException('لا يمكنك تعطيل حسابك.');
         }

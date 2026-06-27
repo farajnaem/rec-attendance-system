@@ -85,8 +85,16 @@ class PermissionService
             'label' => 'الاستعارة المؤقتة من دائرة أخرى',
             'defaults' => ['director', 'program_supervisor'],
         ],
+        'view_department_users' => [
+            'label' => 'مشاهدة موظفي الدائرة',
+            'defaults' => ['program_supervisor'],
+        ],
+        'edit_department_users' => [
+            'label' => 'تعديل موظفي الدائرة (بدون حذف)',
+            'defaults' => ['program_supervisor'],
+        ],
         'manage_users' => [
-            'label' => 'إدارة الموظفين (إضافة وتعديل)',
+            'label' => 'إدارة الموظفين (إضافة وتعديل كامل)',
             'defaults' => ['director'],
         ],
         'manage_permissions' => [
@@ -151,6 +159,8 @@ class PermissionService
             'view_documents' => 'management',
             'transfer_employee' => 'management',
             'borrow_employee' => 'management',
+            'view_department_users' => 'management',
+            'edit_department_users' => 'management',
             'manage_users' => 'management',
             'manage_permissions' => 'management',
             'manage_departments' => 'management',
@@ -333,5 +343,20 @@ class PermissionService
     public static function label(string $code): string
     {
         return self::DEFINITIONS[$code]['label'] ?? $code;
+    }
+
+    public static function canAccessUsersList(int $userId): bool
+    {
+        return self::can($userId, 'manage_users') || self::can($userId, 'view_department_users');
+    }
+
+    public static function canEditUserRecord(int $userId): bool
+    {
+        return self::can($userId, 'manage_users') || self::can($userId, 'edit_department_users');
+    }
+
+    public static function hasFullUserManagement(int $userId): bool
+    {
+        return self::can($userId, 'manage_users');
     }
 }

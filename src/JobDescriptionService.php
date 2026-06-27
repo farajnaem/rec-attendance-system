@@ -14,15 +14,44 @@ class JobDescriptionService
     public static function assertCanManageUser(int $actorId, string $actorRole, int $targetUserId): void
     {
         self::assertCanManage($actorId, $actorRole);
+        $role = RoleHelper::normalizeRole($actorRole);
+        if ($role === 'program_supervisor'
+            && !ScopeService::canManageDepartmentUser($actorId, $actorRole, $targetUserId)) {
+            throw new RuntimeException('لا يمكنك إدارة توصيف هذا الموظف.');
+        }
         $user = UserService::getById($targetUserId);
         if (!$user || (int) $user['is_active'] !== 1) {
             throw new RuntimeException('المستخدم غير موجود أو غير نشط.');
         }
     }
 
-    public static function manageableUsers(): array
+    public static function manageableUsers(int $actorId, string $actorRole): array
     {
         $pdo = Database::getConnection();
+        $role = RoleHelper::normalizeRole($actorRole);
+
+        if ($role === 'program_supervisor') {
+            $users = ScopeService::visibleUsers($actorId, $actorRole);
+            if ($users === []) {
+                return [];
+            }
+            $ids = array_map(static fn (array $u): int => (int) $u['id'], $users);
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $pdo->prepare(
+                "SELECT u.id, u.name, u.email, u.role,
+                        p.job_title,
+                        (SELECT COUNT(*) FROM job_description_duties jd
+                         WHERE jd.user_id = u.id AND jd.is_active = 1) AS duty_count
+                 FROM users u
+                 LEFT JOIN job_description_profiles p ON p.user_id = u.id
+                 WHERE u.is_active = 1 AND u.id IN ($ph)
+                 ORDER BY u.name"
+            );
+            $stmt->execute($ids);
+
+            return $stmt->fetchAll();
+        }
+
         return $pdo->query(
             'SELECT u.id, u.name, u.email, u.role,
                     p.job_title,

@@ -2,7 +2,11 @@
 <h1>التوصيف الوظيفي</h1>
 <p class="text-muted">
     لكل موظف: <strong>مسمى وظيفي</strong> ثم <strong>مهام فرعية</strong> (عناوين فقط).
+    <?php if (Auth::role() === 'program_supervisor'): ?>
+    المشرف يرى موظفي دائرته فقط.
+    <?php else: ?>
     الصلاحية للمدير والمساعد الإداري.
+    <?php endif; ?>
 </p>
 
 <div class="card">

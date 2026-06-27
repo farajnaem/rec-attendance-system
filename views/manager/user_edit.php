@@ -50,6 +50,7 @@
             <?php endif; ?>
             <div class="form-group">
                 <label>الدائرة</label>
+                <?php if (!empty($canChangeDepartment)): ?>
                 <select name="department_id" class="form-control">
                     <option value="">— بدون —</option>
                     <?php foreach ($departments as $d): ?>
@@ -58,6 +59,10 @@
                     </option>
                     <?php endforeach; ?>
                 </select>
+                <?php else: ?>
+                <input type="hidden" name="department_id" value="<?= (int)($department['id'] ?? 0) ?>">
+                <input type="text" class="form-control" disabled value="<?= e($department['name'] ?? '—') ?>">
+                <?php endif; ?>
             </div>
             <div class="form-group" id="editManagerField">
                 <label>المشرف المباشر</label>

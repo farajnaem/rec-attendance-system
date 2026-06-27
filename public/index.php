@@ -435,8 +435,10 @@ try {
         })(),
 
         $route === '/manager/users' && $method === 'GET' => (function () {
-            Auth::requirePermission('manage_users');
+            Auth::requireAnyPermission(['manage_users', 'view_department_users']);
             $isSystemAdmin = Auth::role() === 'system_admin';
+            $canManageAllUsers = PermissionService::hasFullUserManagement(Auth::id());
+            $canEditDeptUsers = Auth::can('edit_department_users');
             $canAssignPermissions = RoleHelper::canEditPermissions(Auth::role());
             $canEditPermissions = $canAssignPermissions;
             $users = ScopeService::visibleUsers(Auth::id(), Auth::role());
@@ -447,10 +449,11 @@ try {
             $availableRoles = $canAssignPermissions
                 ? RoleHelper::all()
                 : ['employee' => RoleHelper::label('employee')];
-            $canBorrowEmployee = Auth::can('borrow_employee');
+            $canBorrowEmployee = Auth::can('borrow_employee') && $canManageAllUsers;
             view('manager/users', compact(
                 'users', 'pagination', 'supervisors', 'departments', 'isSystemAdmin',
-                'canAssignPermissions', 'canEditPermissions', 'availableRoles', 'canBorrowEmployee'
+                'canAssignPermissions', 'canEditPermissions', 'availableRoles', 'canBorrowEmployee',
+                'canManageAllUsers', 'canEditDeptUsers'
             ) + ['roleDefaultsMap' => PermissionService::roleDefaultsMap()]);
         })(),
 
@@ -497,7 +500,7 @@ try {
         })(),
 
         $route === '/manager/users/edit' && $method === 'GET' => (function () {
-            Auth::requirePermission('manage_users');
+            Auth::requireAnyPermission(['manage_users', 'edit_department_users']);
             $userId = (int) ($_GET['id'] ?? 0);
             try {
                 UserService::assertCanEdit($userId, Auth::id(), Auth::role());
@@ -510,24 +513,27 @@ try {
                 flash('error', 'الموظف غير موجود.');
                 redirect('/manager/users');
             }
+            $canManageAllUsers = PermissionService::hasFullUserManagement(Auth::id());
             $canChangeRole = RoleHelper::canEditPermissions(Auth::role());
             $canAssignPermissions = RoleHelper::canEditPermissions(Auth::role());
             $canEditPermissions = $canAssignPermissions;
             $department = DepartmentService::currentForUser($userId);
             $departments = DepartmentService::all();
             $supervisors = UserService::supervisors();
-            $canBorrowEmployee = Auth::can('borrow_employee');
+            $canBorrowEmployee = Auth::can('borrow_employee') && $canManageAllUsers;
+            $canChangeDepartment = $canManageAllUsers;
             $crossAssignments = CrossDepartmentService::listForUser($userId);
             $activeCross = CrossDepartmentService::activeForUser($userId);
             view('manager/user_edit', compact(
                 'user', 'department', 'departments', 'supervisors',
                 'canChangeRole', 'canAssignPermissions', 'canEditPermissions', 'canBorrowEmployee',
+                'canManageAllUsers', 'canChangeDepartment',
                 'crossAssignments', 'activeCross'
             ));
         })(),
 
         $route === '/manager/users/update' && $method === 'POST' => (function () {
-            Auth::requirePermission('manage_users');
+            Auth::requireAnyPermission(['manage_users', 'edit_department_users']);
             if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
                 flash('error', 'انتهت صلاحية النموذج.');
                 redirect('/manager/users');
@@ -1078,7 +1084,7 @@ try {
                 flash('error', $e->getMessage());
                 redirect('/manager/dashboard');
             }
-            $users = JobDescriptionService::manageableUsers();
+            $users = JobDescriptionService::manageableUsers(Auth::id(), Auth::role());
             view('manager/job_description', compact('users'));
         })(),
 
@@ -1140,7 +1146,7 @@ try {
             $userId = (int) ($_POST['user_id'] ?? 0);
             $dutyId = (int) ($_POST['duty_id'] ?? 0);
             try {
-                JobDescriptionService::assertCanManage(Auth::id(), Auth::role());
+                JobDescriptionService::assertCanManageUser(Auth::id(), Auth::role(), $userId);
                 $duty = JobDescriptionService::getById($dutyId);
                 if (!$duty || (int) $duty['user_id'] !== $userId) {
                     throw new RuntimeException('المهمة غير موجودة.');
@@ -1162,7 +1168,7 @@ try {
             $userId = (int) ($_POST['user_id'] ?? 0);
             $dutyId = (int) ($_POST['duty_id'] ?? 0);
             try {
-                JobDescriptionService::assertCanManage(Auth::id(), Auth::role());
+                JobDescriptionService::assertCanManageUser(Auth::id(), Auth::role(), $userId);
                 $duty = JobDescriptionService::getById($dutyId);
                 if (!$duty || (int) $duty['user_id'] !== $userId) {
                     throw new RuntimeException('المهمة غير موجودة.');

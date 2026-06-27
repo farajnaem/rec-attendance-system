@@ -8,11 +8,17 @@ class ScopeService
     public static function visibleUsers(int $actorId, string $actorRole): array
     {
         $role = RoleHelper::normalizeRole($actorRole);
-        if (in_array($role, ['system_admin', 'director'], true)) {
+        if (PermissionService::hasFullUserManagement($actorId)
+            && in_array($role, ['system_admin', 'director'], true)) {
             return UserService::listForAdmin();
         }
-        if ($role === 'program_supervisor') {
-            return self::usersForSupervisor($actorId);
+        if ($role === 'program_supervisor'
+            && (PermissionService::can($actorId, 'view_department_users')
+                || PermissionService::can($actorId, 'edit_department_users'))) {
+            return self::departmentEmployeesForSupervisor($actorId);
+        }
+        if (PermissionService::hasFullUserManagement($actorId)) {
+            return UserService::listForAdmin();
         }
         return UserService::listForManager($actorId);
     }
@@ -39,8 +45,12 @@ class ScopeService
         if ($actorId === $targetUserId) {
             return true;
         }
+        if (self::canManageDepartmentUser($actorId, $actorRole, $targetUserId)) {
+            return true;
+        }
         $role = RoleHelper::normalizeRole($actorRole);
-        if (in_array($role, ['system_admin', 'director'], true)) {
+        if (PermissionService::hasFullUserManagement($actorId)
+            && in_array($role, ['system_admin', 'director'], true)) {
             return UserService::getById($targetUserId) !== null;
         }
         foreach (self::visibleUsers($actorId, $actorRole) as $u) {
@@ -49,6 +59,50 @@ class ScopeService
             }
         }
         return false;
+    }
+
+    /** مشرف الدائرة: موظفون في دوائره فقط (بدون حذف أو إدارة كاملة) */
+    public static function canManageDepartmentUser(int $actorId, string $actorRole, int $targetUserId): bool
+    {
+        if ($actorId === $targetUserId) {
+            return PermissionService::canEditUserRecord($actorId);
+        }
+        if (!PermissionService::canAccessUsersList($actorId)
+            && !PermissionService::canEditUserRecord($actorId)
+            && !PermissionService::can($actorId, 'manage_job_description')) {
+            return false;
+        }
+
+        $role = RoleHelper::normalizeRole($actorRole);
+        if (in_array($role, ['system_admin', 'director'], true)
+            && PermissionService::hasFullUserManagement($actorId)) {
+            return UserService::getById($targetUserId) !== null;
+        }
+
+        if ($role !== 'program_supervisor') {
+            return false;
+        }
+
+        $target = UserService::getById($targetUserId);
+        if (!$target || RoleHelper::isManagement((string) $target['role'])) {
+            return false;
+        }
+
+        return self::isInSupervisedDepartment($actorId, $targetUserId);
+    }
+
+    public static function isInSupervisedDepartment(int $supervisorId, int $targetUserId): bool
+    {
+        $deptIds = self::supervisedDepartmentIds($supervisorId);
+        if ($deptIds === []) {
+            return false;
+        }
+        $dept = DepartmentService::currentForUser($targetUserId);
+        if (!$dept) {
+            return false;
+        }
+
+        return in_array((int) $dept['id'], $deptIds, true);
     }
 
     public static function canViewReport(int $actorId, string $actorRole, int $subjectUserId): bool
@@ -73,6 +127,29 @@ class ScopeService
         );
         $stmt->execute([$userId]);
         return array_map('intval', array_column($stmt->fetchAll(), 'department_id'));
+    }
+
+    private static function departmentEmployeesForSupervisor(int $supervisorId): array
+    {
+        $deptIds = self::supervisedDepartmentIds($supervisorId);
+        if ($deptIds === []) {
+            return [];
+        }
+
+        $pdo = Database::getConnection();
+        $ph = implode(',', array_fill(0, count($deptIds), '?'));
+        $stmt = $pdo->prepare(
+            "SELECT u.*, m.name AS manager_name, d.name AS department_name
+             FROM users u
+             JOIN user_departments ud ON ud.user_id = u.id AND ud.is_current = 1
+             JOIN departments d ON d.id = ud.department_id
+             LEFT JOIN users m ON m.id = u.manager_id
+             WHERE ud.department_id IN ($ph) AND u.role = 'employee'
+             ORDER BY u.name"
+        );
+        $stmt->execute($deptIds);
+
+        return $stmt->fetchAll();
     }
 
     private static function usersForSupervisor(int $supervisorId): array

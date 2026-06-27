@@ -144,6 +144,19 @@ class Auth
         }
     }
 
+    /** @param string[] $codes */
+    public static function requireAnyPermission(array $codes): void
+    {
+        self::requireLogin();
+        foreach ($codes as $code) {
+            if (PermissionService::can(self::id(), $code)) {
+                return;
+            }
+        }
+        flash('error', 'ليس لديك صلاحية للوصول إلى هذه الصفحة.');
+        redirect(RoleHelper::dashboardPath(self::role()));
+    }
+
     public static function can(string $code): bool
     {
         if (!self::check()) {

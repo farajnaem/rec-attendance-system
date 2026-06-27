@@ -57,10 +57,14 @@
 <?php endif; ?>
 
 <div class="grid-2">
-    <?php if (Auth::can('manage_users')): ?>
+    <?php if (PermissionService::canAccessUsersList(Auth::id())): ?>
     <a href="<?= e(url('/manager/users')) ?>" class="card link-card">
         <h3>إدارة الموظفين</h3>
-        <p class="text-muted">إضافة موظفين وتعديل الصلاحيات</p>
+        <p class="text-muted">
+            <?= PermissionService::hasFullUserManagement(Auth::id())
+                ? 'إضافة موظفين وتعديل الصلاحيات'
+                : 'مشاهدة وتعديل موظفي الدائرة' ?>
+        </p>
     </a>
     <?php endif; ?>
     <?php if (Auth::can('manage_departments')): ?>

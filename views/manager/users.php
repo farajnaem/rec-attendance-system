@@ -1,7 +1,16 @@
 <?php $title = 'إدارة الموظفين'; ?>
 <h1>إدارة الموظفين</h1>
-<p class="text-muted">اختر الوصف الوظيفي — تُحدَّد الصلاحيات تلقائياً حسب الدور ويمكن تعديلها قبل الإضافة.</p>
+<p class="text-muted">
+    <?php if (!empty($canManageAllUsers)): ?>
+    اختر الوصف الوظيفي — تُحدَّد الصلاحيات تلقائياً حسب الدور ويمكن تعديلها قبل الإضافة.
+    <?php elseif (!empty($canEditDeptUsers)): ?>
+    يمكنك مشاهدة وتعديل موظفي دائرتك فقط (بدون إضافة أو حذف).
+    <?php else: ?>
+    يمكنك مشاهدة موظفي دائرتك فقط.
+    <?php endif; ?>
+</p>
 
+<?php if (!empty($canManageAllUsers)): ?>
 <div class="card" id="addUserPanel" hidden>
     <h2>إضافة موظف جديد</h2>
     <form method="post" action="<?= e(url('/manager/users/create')) ?>">
@@ -78,11 +87,14 @@
         <button type="button" class="btn btn-outline" style="margin-top:1rem" onclick="toggleAddPanel('addUserPanel', false)">إلغاء</button>
     </form>
 </div>
+<?php endif; ?>
 
 <div class="card">
     <div class="card-header-row">
         <h2>قائمة الموظفين</h2>
+        <?php if (!empty($canManageAllUsers)): ?>
         <button type="button" class="btn" onclick="toggleAddPanel('addUserPanel'); setTimeout(function(){ var r=document.getElementById('userRole'); if(r) r.dispatchEvent(new Event('change')); }, 50);">+ إضافة</button>
+        <?php endif; ?>
     </div>
     <div class="form-group" style="max-width:320px;margin-bottom:1rem">
         <label for="userSearch">بحث</label>
@@ -107,9 +119,13 @@
         <?php else: foreach ($pagination['items'] as $u): ?>
             <tr data-search="<?= e(mb_strtolower($u['name'] . ' ' . $u['email'])) ?>">
                 <td>
+                    <?php if (!empty($canEditDeptUsers) || !empty($canManageAllUsers)): ?>
                     <a href="<?= e(url('/manager/users/edit?id=' . (int)$u['id'])) ?>" class="fw-bold" style="color:var(--primary);text-decoration:none">
                         <?= e($u['name']) ?>
                     </a>
+                    <?php else: ?>
+                    <?= e($u['name']) ?>
+                    <?php endif; ?>
                 </td>
                 <td><?= e($u['email']) ?></td>
                 <td><?= e(RoleHelper::label($u['role'])) ?></td>
@@ -124,17 +140,31 @@
                     <?php endif; ?>
                 </td>
                 <td class="text-nowrap">
+                    <?php
+                    $canEditRow = (!empty($canEditDeptUsers) || !empty($canManageAllUsers))
+                        && (int)$u['id'] !== Auth::id();
+                    $canEditSelf = (int)$u['id'] === Auth::id() && (!empty($canManageAllUsers));
+                    $showActions = $canEditRow || $canEditSelf
+                        || (!empty($canManageAllUsers) && (int)$u['id'] !== Auth::id())
+                        || Auth::can('manage_job_description');
+                    ?>
+                    <?php if ($showActions): ?>
                     <details class="row-actions-menu">
                         <summary class="row-actions-trigger" aria-label="إجراءات <?= e($u['name']) ?>">
                             إجراءات
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
                         </summary>
                         <div class="row-actions-panel" role="menu">
+                            <?php if ($canEditRow || $canEditSelf): ?>
                             <a class="row-actions-item" href="<?= e(url('/manager/users/edit?id=' . (int)$u['id'])) ?>" role="menuitem">تعديل</a>
-                            <?php if (!empty($canEditPermissions) && (int)$u['id'] !== Auth::id()): ?>
+                            <?php endif; ?>
+                            <?php if (Auth::can('manage_job_description') && RoleHelper::isEmployee($u['role'])): ?>
+                            <a class="row-actions-item" href="<?= e(url('/manager/job-description/edit?user_id=' . (int)$u['id'])) ?>" role="menuitem">التوصيف الوظيفي</a>
+                            <?php endif; ?>
+                            <?php if (!empty($canEditPermissions) && !empty($canManageAllUsers) && (int)$u['id'] !== Auth::id()): ?>
                             <a class="row-actions-item" href="<?= e(url('/manager/users/permissions?id=' . (int)$u['id'])) ?>" role="menuitem">صلاحيات</a>
                             <?php endif; ?>
-                            <?php if ((int)$u['id'] !== Auth::id()): ?>
+                            <?php if (!empty($canManageAllUsers) && (int)$u['id'] !== Auth::id()): ?>
                             <form method="post" action="<?= e(url('/manager/users/toggle')) ?>" class="row-actions-form">
                                 <?= Csrf::field() ?>
                                 <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
@@ -153,6 +183,9 @@
                             <?php endif; ?>
                         </div>
                     </details>
+                    <?php else: ?>
+                    —
+                    <?php endif; ?>
                 </td>
             </tr>
         <?php endforeach; endif; ?>

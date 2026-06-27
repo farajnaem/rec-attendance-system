@@ -14,6 +14,7 @@ class MigrationRunner
     private const PHASE_8 = 'phase_8_narrative_docs_replies';
     private const PHASE_9 = 'phase_9_permissions_matrix';
     private const PHASE_10 = 'phase_10_manage_permissions';
+    private const PHASE_11 = 'phase_11_supervisor_dept_users';
 
     public static function ensureLatest(): void
     {
@@ -59,6 +60,10 @@ class MigrationRunner
         if (!self::isApplied($pdo, self::PHASE_10)) {
             self::runPhase10($pdo);
             self::markApplied($pdo, self::PHASE_10);
+        }
+        if (!self::isApplied($pdo, self::PHASE_11)) {
+            self::runPhase11($pdo);
+            self::markApplied($pdo, self::PHASE_11);
         }
     }
 
@@ -728,6 +733,23 @@ class MigrationRunner
 
     private static function runPhase10(PDO $pdo): void
     {
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
+    }
+
+    /** صلاحيات محدودة للمشرف على موظفي دائرته فقط */
+    private static function runPhase11(PDO $pdo): void
+    {
+        $supervisors = $pdo->query(
+            'SELECT id FROM users WHERE role IN ("program_supervisor", "manager")'
+        )->fetchAll();
+        foreach ($supervisors as $row) {
+            $pdo->prepare('DELETE FROM user_permissions WHERE user_id = ? AND permission_code = ?')
+                ->execute([(int) $row['id'], 'manage_users']);
+        }
+
         $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
         foreach ($users as $user) {
             PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
