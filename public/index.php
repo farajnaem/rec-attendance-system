@@ -144,6 +144,7 @@ try {
             $tz = Auth::timezone();
             $status = AttendanceService::todayStatus(Auth::id(), $tz);
             $tasks = TaskService::forEmployee(Auth::id(), date('Y-m-d', strtotime('-7 days')), date('Y-m-d', strtotime('+7 days')));
+            $taskReplies = TaskService::repliesForTasks(array_column($tasks, 'id'));
             $recent = AttendanceService::recent(Auth::id(), 7);
             $gpsRequired = LocationService::hasActiveLocations();
             $workLocations = $gpsRequired ? LocationService::activeForClient() : [];
@@ -156,7 +157,7 @@ try {
                 $isLateToday = WorkScheduleService::isLateCheckIn($localCheckIn);
             }
             view('employee/dashboard', array_merge(
-                compact('status', 'tasks', 'recent', 'tz', 'gpsRequired', 'crossAssignment', 'workLocations', 'jobDescription', 'leaves', 'isLateToday'),
+                compact('status', 'tasks', 'taskReplies', 'recent', 'tz', 'gpsRequired', 'crossAssignment', 'workLocations', 'jobDescription', 'leaves', 'isLateToday'),
                 ['loadSignature' => Auth::can('sign_attendance')]
             ));
         })(),
@@ -201,7 +202,11 @@ try {
             }
             $task = TaskService::getById($taskId);
             $isOwner = $task && (int) $task['employee_id'] === Auth::id();
-            if (!$isOwner && !Auth::can('complete_daily_tasks') && !Auth::can('manage_daily_tasks')) {
+            if ($isOwner && !Auth::can('complete_own_tasks')) {
+                flash('error', 'لا يمكنك إتمام المهام.');
+                redirect(RoleHelper::dashboardPath(Auth::role()));
+            }
+            if (!$isOwner && !Auth::can('respond_complete_tasks') && !Auth::can('manage_daily_tasks')) {
                 flash('error', 'لا يمكنك إتمام المهام.');
                 redirect(RoleHelper::dashboardPath(Auth::role()));
             }
@@ -247,10 +252,64 @@ try {
 
         $route === '/employee/report' && $method === 'GET' => (function () {
             Auth::requireLogin();
+            Auth::requirePermission('monthly_self_report');
             $year = (int) ($_GET['year'] ?? date('Y'));
             $month = (int) ($_GET['month'] ?? date('n'));
             $report = ReportService::fullReport(Auth::id(), $year, $month);
-            view('employee/monthly_report', compact('report', 'year', 'month'));
+            $narrative = NarrativeReportService::get(Auth::id(), $year, $month);
+            $canEditNarrative = NarrativeReportService::canEdit($year, $month);
+            $narrativeDeadline = NarrativeReportService::deadlineLabel($year, $month);
+            $submissionDays = NarrativeReportService::submissionDays();
+            view('employee/monthly_report', compact(
+                'report', 'year', 'month', 'narrative', 'canEditNarrative',
+                'narrativeDeadline', 'submissionDays'
+            ));
+        })(),
+
+        $route === '/employee/report/narrative/save' && $method === 'POST' => (function () {
+            Auth::requireLogin();
+            Auth::requirePermission('monthly_self_report');
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/employee/report');
+            }
+            $year = (int) ($_POST['year'] ?? date('Y'));
+            $month = (int) ($_POST['month'] ?? date('n'));
+            try {
+                NarrativeReportService::save(
+                    Auth::id(),
+                    $year,
+                    $month,
+                    $_POST['work_summary'] ?? '',
+                    $_POST['positives'] ?? '',
+                    $_POST['negatives'] ?? '',
+                    $_POST['development_notes'] ?? '',
+                    isset($_POST['submit_final'])
+                );
+                flash('success', isset($_POST['submit_final']) ? 'تم تقديم التقرير السردي.' : 'تم حفظ المسودة.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/employee/report?year=' . $year . '&month=' . $month);
+        })(),
+
+        $route === '/employee/task/reply' && $method === 'POST' => (function () {
+            Auth::requireLogin();
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/employee/dashboard#my-tasks');
+            }
+            $taskId = (int) ($_POST['task_id'] ?? 0);
+            try {
+                if (!TaskService::canAccess($taskId, Auth::id(), Auth::role())) {
+                    throw new RuntimeException('المهمة غير موجودة.');
+                }
+                TaskService::addReply($taskId, Auth::id(), $_POST['message'] ?? '');
+                flash('success', 'تم إرسال الرد إلى معطي المهمة.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/employee/dashboard#my-tasks');
         })(),
 
         $route === '/manager/dashboard' && $method === 'GET' => (function () {
@@ -281,7 +340,8 @@ try {
                     $to
                 );
             $employees = ScopeService::visibleStaff(Auth::id(), Auth::role());
-            view('manager/tasks', compact('tasks', 'employees', 'from', 'to'));
+            $taskReplies = TaskService::repliesForTasks(array_column($tasks, 'id'));
+            view('manager/tasks', compact('tasks', 'employees', 'from', 'to', 'taskReplies'));
         })(),
 
         $route === '/manager/tasks/create' && $method === 'POST' => (function () {
@@ -295,7 +355,7 @@ try {
                 $employeeId = (int) $_POST['employee_id'];
                 if (Auth::role() !== 'system_admin'
                     && !ScopeService::canViewUser(Auth::id(), Auth::role(), $employeeId)) {
-                    throw new RuntimeException('لا يمكنك إسناد مهمة لهذا المستخدم.');
+                    throw new RuntimeException('لا يمكنك إسناد مهمة لهذا الموظف.');
                 }
                 TaskService::create(
                     $employeeId,
@@ -367,7 +427,7 @@ try {
             $employees = ScopeService::visibleStaff(Auth::id(), Auth::role());
             $employeeId = (int) ($_GET['employee_id'] ?? ($employees[0]['id'] ?? 0));
             if ($employeeId && !ScopeService::canViewReport(Auth::id(), Auth::role(), $employeeId)) {
-                flash('error', 'لا يمكنك عرض تقرير هذا المستخدم.');
+                flash('error', 'لا يمكنك عرض تقرير هذا الموظف.');
                 redirect('/manager/reports');
             }
             $report = $employeeId ? ReportService::fullReport($employeeId, $year, $month) : null;
@@ -377,7 +437,8 @@ try {
         $route === '/manager/users' && $method === 'GET' => (function () {
             Auth::requirePermission('manage_users');
             $isSystemAdmin = Auth::role() === 'system_admin';
-            $canAssignPermissions = RoleHelper::canAssignPermissions(Auth::role());
+            $canAssignPermissions = RoleHelper::canEditPermissions(Auth::role());
+            $canEditPermissions = $canAssignPermissions;
             $users = ScopeService::visibleUsers(Auth::id(), Auth::role());
             $page = max(1, (int) ($_GET['page'] ?? 1));
             $pagination = paginate($users, $page, 20);
@@ -389,8 +450,8 @@ try {
             $canBorrowEmployee = Auth::can('borrow_employee');
             view('manager/users', compact(
                 'users', 'pagination', 'supervisors', 'departments', 'isSystemAdmin',
-                'canAssignPermissions', 'availableRoles', 'canBorrowEmployee'
-            ));
+                'canAssignPermissions', 'canEditPermissions', 'availableRoles', 'canBorrowEmployee'
+            ) + ['roleDefaultsMap' => PermissionService::roleDefaultsMap()]);
         })(),
 
         $route === '/manager/users/create' && $method === 'POST' => (function () {
@@ -401,7 +462,7 @@ try {
             }
             try {
                 $role = $_POST['role'] ?? 'employee';
-                if (!RoleHelper::canAssignPermissions(Auth::role())) {
+                if (!RoleHelper::canEditPermissions(Auth::role())) {
                     $role = 'employee';
                 }
                 if (!RoleHelper::isValid($role)) {
@@ -411,9 +472,12 @@ try {
                     ? (int) ($_POST['manager_id'] ?? 0) ?: null
                     : null;
                 $deptId = (int) ($_POST['department_id'] ?? 0) ?: null;
-                $canAssign = RoleHelper::canAssignPermissions(Auth::role());
-                $perms = ($canAssign && isset($_POST['permissions']) && is_array($_POST['permissions']))
-                    ? $_POST['permissions']
+                $canAssign = RoleHelper::canEditPermissions(Auth::role());
+                $role = RoleHelper::normalizeRole($role);
+                $perms = $canAssign
+                    ? (isset($_POST['permissions']) && is_array($_POST['permissions']) && $_POST['permissions'] !== []
+                        ? $_POST['permissions']
+                        : PermissionService::defaultCodesForRole($role))
                     : null;
                 UserService::create(
                     $_POST['name'] ?? '',
@@ -425,7 +489,7 @@ try {
                     $deptId,
                     $perms
                 );
-                flash('success', 'تمت إضافة المستخدم بنجاح.');
+                flash('success', 'تمت إضافة الموظف بنجاح.');
             } catch (Throwable $e) {
                 flash('error', $e->getMessage());
             }
@@ -443,11 +507,12 @@ try {
             }
             $user = UserService::getById($userId);
             if (!$user) {
-                flash('error', 'المستخدم غير موجود.');
+                flash('error', 'الموظف غير موجود.');
                 redirect('/manager/users');
             }
-            $canChangeRole = RoleHelper::canAssignPermissions(Auth::role());
-            $canAssignPermissions = $canChangeRole;
+            $canChangeRole = RoleHelper::canEditPermissions(Auth::role());
+            $canAssignPermissions = RoleHelper::canEditPermissions(Auth::role());
+            $canEditPermissions = $canAssignPermissions;
             $department = DepartmentService::currentForUser($userId);
             $departments = DepartmentService::all();
             $supervisors = UserService::supervisors();
@@ -456,7 +521,7 @@ try {
             $activeCross = CrossDepartmentService::activeForUser($userId);
             view('manager/user_edit', compact(
                 'user', 'department', 'departments', 'supervisors',
-                'canChangeRole', 'canAssignPermissions', 'canBorrowEmployee',
+                'canChangeRole', 'canAssignPermissions', 'canEditPermissions', 'canBorrowEmployee',
                 'crossAssignments', 'activeCross'
             ));
         })(),
@@ -470,7 +535,7 @@ try {
             $userId = (int) ($_POST['user_id'] ?? 0);
             try {
                 $role = $_POST['role'] ?? 'employee';
-                $canChangeRole = RoleHelper::canAssignPermissions(Auth::role());
+                $canChangeRole = RoleHelper::canEditPermissions(Auth::role());
                 if (!$canChangeRole) {
                     $existing = UserService::getById($userId);
                     $role = $existing ? $existing['role'] : 'employee';
@@ -493,7 +558,7 @@ try {
                     Auth::role(),
                     $canChangeRole
                 );
-                flash('success', 'تم حفظ بيانات المستخدم.');
+                flash('success', 'تم حفظ بيانات الموظف.');
             } catch (Throwable $e) {
                 flash('error', $e->getMessage());
             }
@@ -508,7 +573,7 @@ try {
             }
             try {
                 UserService::toggleActive((int) ($_POST['user_id'] ?? 0), Auth::id(), Auth::role());
-                flash('success', 'تم تحديث حالة المستخدم.');
+                flash('success', 'تم تحديث حالة الموظف.');
             } catch (Throwable $e) {
                 flash('error', $e->getMessage());
             }
@@ -523,33 +588,50 @@ try {
             }
             try {
                 UserService::delete((int) ($_POST['user_id'] ?? 0), Auth::id(), Auth::role());
-                flash('success', 'تم حذف المستخدم وجميع سجلاته المرتبطة.');
+                flash('success', 'تم حذف الموظف وجميع سجلاته المرتبطة.');
             } catch (Throwable $e) {
                 flash('error', $e->getMessage());
             }
             redirect('/manager/users');
         })(),
 
+        $route === '/manager/permissions' && $method === 'GET' => (function () {
+            if (!PermissionService::canGrantToOthers(Auth::id(), Auth::role())) {
+                flash('error', 'إسناد الصلاحيات متاح للمدير ومدير النظام فقط.');
+                redirect('/manager/dashboard');
+            }
+            $employees = [];
+            foreach (ScopeService::visibleUsers(Auth::id(), Auth::role()) as $emp) {
+                $emp['permission_count'] = count(
+                    PermissionService::effectiveCodesForUser((int) $emp['id'], (string) $emp['role'])
+                );
+                $employees[] = $emp;
+            }
+            view('manager/permissions_hub', compact('employees'));
+        })(),
+
         $route === '/manager/users/permissions' && $method === 'GET' => (function () {
-            Auth::requirePermission('manage_users');
-            if (!RoleHelper::canAssignPermissions(Auth::role())) {
-                flash('error', 'لا يمكنك تعديل الصلاحيات.');
+            if (!PermissionService::canGrantToOthers(Auth::id(), Auth::role())) {
+                flash('error', 'إسناد الصلاحيات متاح للمدير ومدير النظام فقط.');
                 redirect('/manager/users');
             }
             $userId = (int) ($_GET['id'] ?? 0);
             $user = UserService::getById($userId);
             if (!$user) {
-                flash('error', 'المستخدم غير موجود.');
+                flash('error', 'الموظف غير موجود.');
                 redirect('/manager/users');
             }
-            $granted = PermissionService::codesForUser($userId);
+            $granted = PermissionService::effectiveCodesForUser($userId, (string) $user['role']);
             $department = DepartmentService::currentForUser($userId);
             $departments = DepartmentService::all();
             view('manager/user_permissions', compact('user', 'granted', 'department', 'departments'));
         })(),
 
         $route === '/manager/users/permissions' && $method === 'POST' => (function () {
-            Auth::requirePermission('manage_users');
+            if (!PermissionService::canGrantToOthers(Auth::id(), Auth::role())) {
+                flash('error', 'إسناد الصلاحيات متاح للمدير ومدير النظام فقط.');
+                redirect('/manager/users');
+            }
             if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
                 flash('error', 'انتهت صلاحية النموذج.');
                 redirect('/manager/users');
@@ -647,13 +729,19 @@ try {
         })(),
 
         $route === '/manager/work-schedule' && $method === 'GET' => (function () {
-            Auth::requireRole(RoleHelper::orgAdminRoles());
+            if (!Auth::can('manage_work_schedule') && !Auth::can('manage_report_deadline') && !RoleHelper::isSystemAdmin(Auth::role())) {
+                flash('error', 'لا يمكنك تعديل ساعات الدوام.');
+                redirect('/manager/system');
+            }
             $schedule = WorkScheduleService::get();
             view('manager/work_schedule', compact('schedule'));
         })(),
 
         $route === '/manager/work-schedule/save' && $method === 'POST' => (function () {
-            Auth::requireRole(RoleHelper::orgAdminRoles());
+            if (!Auth::can('manage_work_schedule') && !Auth::can('manage_report_deadline') && !RoleHelper::isSystemAdmin(Auth::role())) {
+                flash('error', 'لا يمكنك تعديل ساعات الدوام.');
+                redirect('/manager/system');
+            }
             if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
                 flash('error', 'انتهت صلاحية النموذج.');
                 redirect('/manager/work-schedule');
@@ -663,18 +751,160 @@ try {
                 if (!is_array($days) || empty($days)) {
                     throw new InvalidArgumentException('اختر يوم عمل واحد على الأقل.');
                 }
+                $reportDays = Auth::can('manage_report_deadline') || RoleHelper::isSystemAdmin(Auth::role())
+                    ? (int) ($_POST['report_submission_days'] ?? 5)
+                    : null;
                 WorkScheduleService::update(
                     $_POST['work_start_time'] ?? '08:00',
                     $_POST['work_end_time'] ?? '16:00',
                     (int) ($_POST['late_grace_minutes'] ?? 15),
                     implode(',', $days),
-                    Auth::id()
+                    Auth::id(),
+                    $reportDays
                 );
-                flash('success', 'تم حفظ ساعات الدوام الرسمي.');
+                flash('success', 'تم حفظ إعدادات الدوام والتقرير السردي.');
             } catch (Throwable $e) {
                 flash('error', $e->getMessage());
             }
             redirect('/manager/work-schedule');
+        })(),
+
+        $route === '/manager/system' && $method === 'GET' => (function () {
+            $canAccess = Auth::can('manage_work_schedule')
+                || Auth::can('manage_report_deadline')
+                || Auth::can('manage_locations')
+                || Auth::can('borrow_employee')
+                || Auth::can('transfer_employee')
+                || Auth::can('manage_system')
+                || RoleHelper::isSystemAdmin(Auth::role());
+            if (!$canAccess) {
+                flash('error', 'لا يمكنك الوصول لإدارة النظام.');
+                redirect('/manager/dashboard');
+            }
+            view('manager/system');
+        })(),
+
+        $route === '/manager/borrow-employee' && $method === 'GET' => (function () {
+            Auth::requirePermission('borrow_employee');
+            $borrowable = CrossDepartmentService::borrowableEmployees(Auth::id(), Auth::role());
+            $active = CrossDepartmentService::activeBorrowingsForActor(Auth::id(), Auth::role());
+            $role = RoleHelper::normalizeRole(Auth::role());
+            if (in_array($role, ['system_admin', 'director'], true)) {
+                $targetDepartments = DepartmentService::all();
+            } else {
+                $deptIds = ScopeService::supervisedDepartmentIds(Auth::id());
+                $targetDepartments = array_values(array_filter(
+                    DepartmentService::all(),
+                    static fn ($d) => in_array((int) $d['id'], $deptIds, true)
+                ));
+            }
+            view('manager/borrow_employee', compact('borrowable', 'active', 'targetDepartments'));
+        })(),
+
+        $route === '/manager/borrow-employee/create' && $method === 'POST' => (function () {
+            Auth::requirePermission('borrow_employee');
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/manager/borrow-employee');
+            }
+            try {
+                $targetDept = (int) ($_POST['target_department_id'] ?? 0);
+                CrossDepartmentService::assertCanAssign(Auth::id(), Auth::role(), $targetDept);
+                $userId = (int) ($_POST['user_id'] ?? 0);
+                CrossDepartmentService::create(
+                    $userId,
+                    $targetDept,
+                    $_POST['start_date'] ?? date('Y-m-d'),
+                    trim($_POST['end_date'] ?? '') ?: null,
+                    $_POST['notes'] ?? null,
+                    Auth::id()
+                );
+                flash('success', 'تمت استعارة الموظف بنجاح.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/manager/borrow-employee');
+        })(),
+
+        $route === '/manager/borrow-employee/end' && $method === 'POST' => (function () {
+            Auth::requirePermission('borrow_employee');
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/manager/borrow-employee');
+            }
+            try {
+                CrossDepartmentService::end((int) ($_POST['assignment_id'] ?? 0), Auth::id(), Auth::role());
+                flash('success', 'تم إنهاء الاستعارة.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/manager/borrow-employee');
+        })(),
+
+        $route === '/documents' && $method === 'GET' => (function () {
+            Auth::requireLogin();
+            if (!Auth::can('view_documents')) {
+                flash('error', 'لا يمكنك عرض المستندات.');
+                redirect('/employee/dashboard');
+            }
+            $documents = DocumentService::listAll();
+            view('documents/index', compact('documents'));
+        })(),
+
+        $route === '/documents/upload' && $method === 'POST' => (function () {
+            Auth::requirePermission('manage_documents');
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/documents');
+            }
+            try {
+                DocumentService::upload(Auth::id(), $_POST['title'] ?? '', $_FILES['document'] ?? []);
+                flash('success', 'تم رفع المستند.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/documents');
+        })(),
+
+        $route === '/documents/download' && $method === 'GET' => (function () {
+            Auth::requireLogin();
+            if (!Auth::can('view_documents')) {
+                http_response_code(403);
+                echo 'غير مصرح';
+                return;
+            }
+            $doc = DocumentService::get((int) ($_GET['id'] ?? 0));
+            if (!$doc) {
+                http_response_code(404);
+                echo 'غير موجود';
+                return;
+            }
+            $path = DocumentService::filePath($doc);
+            if (!is_file($path)) {
+                http_response_code(404);
+                echo 'الملف غير موجود';
+                return;
+            }
+            header('Content-Type: ' . $doc['mime_type']);
+            header('Content-Disposition: attachment; filename="' . rawurlencode($doc['original_filename']) . '"');
+            header('Content-Length: ' . (string) filesize($path));
+            readfile($path);
+            exit;
+        })(),
+
+        $route === '/documents/delete' && $method === 'POST' => (function () {
+            Auth::requirePermission('manage_documents');
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/documents');
+            }
+            try {
+                DocumentService::delete((int) ($_POST['document_id'] ?? 0), Auth::id(), Auth::role());
+                flash('success', 'تم حذف المستند.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/documents');
         })(),
 
         $route === '/manager/database' && $method === 'GET' => (function () {
@@ -805,9 +1035,9 @@ try {
             }
             $userId = (int) ($_POST['user_id'] ?? 0);
             try {
-                CrossDepartmentService::assertCanAssign(Auth::id(), Auth::role());
+                CrossDepartmentService::assertCanAssign(Auth::id(), Auth::role(), (int) ($_POST['target_department_id'] ?? 0));
                 if (!ScopeService::canViewUser(Auth::id(), Auth::role(), $userId)) {
-                    throw new RuntimeException('لا يمكنك تعيين هذا المستخدم.');
+                    throw new RuntimeException('لا يمكنك تعيين هذا الموظف.');
                 }
                 CrossDepartmentService::create(
                     $userId,

@@ -6,10 +6,6 @@ class JobDescriptionService
 {
     public static function assertCanManage(int $actorId, string $actorRole): void
     {
-        $role = RoleHelper::normalizeRole($actorRole);
-        if (!in_array($role, ['director', 'admin_assistant', 'system_admin'], true)) {
-            throw new RuntimeException('إدخال التوصيف الوظيفي متاح للمدير والمساعد الإداري فقط.');
-        }
         if (!PermissionService::can($actorId, 'manage_job_description')) {
             throw new RuntimeException('لا تملك صلاحية إدخال التوصيف الوظيفي.');
         }

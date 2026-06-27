@@ -63,16 +63,23 @@ class RoleHelper
         return in_array(self::normalizeRole($role), ['system_admin', 'director'], true);
     }
 
+    /** المدير ومدير النظام — إسناد الصلاحيات من المجموعة لأي موظف */
+    public static function canEditPermissions(string $role): bool
+    {
+        $role = self::normalizeRole($role);
+        return in_array($role, ['system_admin', 'director'], true);
+    }
+
+    /** @deprecated استخدم canEditPermissions */
     public static function canAssignPermissions(string $role): bool
     {
-        return self::isOrgAdmin($role);
+        return self::canEditPermissions($role);
     }
 
     public static function canManageUsers(string $role): bool
     {
-        return in_array(self::normalizeRole($role), [
-            'system_admin', 'director', 'program_supervisor',
-        ], true);
+        $role = self::normalizeRole($role);
+        return in_array($role, ['system_admin', 'director'], true);
     }
 
     public static function dashboardPath(string $role): string

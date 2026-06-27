@@ -11,6 +11,9 @@ class MigrationRunner
     private const PHASE_5 = 'phase_5_sync_permissions';
     private const PHASE_6 = 'phase_6_audit_security';
     private const PHASE_7 = 'phase_7_leaves_workflow';
+    private const PHASE_8 = 'phase_8_narrative_docs_replies';
+    private const PHASE_9 = 'phase_9_permissions_matrix';
+    private const PHASE_10 = 'phase_10_manage_permissions';
 
     public static function ensureLatest(): void
     {
@@ -44,6 +47,18 @@ class MigrationRunner
         if (!self::isApplied($pdo, self::PHASE_7)) {
             self::runPhase7($pdo);
             self::markApplied($pdo, self::PHASE_7);
+        }
+        if (!self::isApplied($pdo, self::PHASE_8)) {
+            self::runPhase8($pdo);
+            self::markApplied($pdo, self::PHASE_8);
+        }
+        if (!self::isApplied($pdo, self::PHASE_9)) {
+            self::runPhase9($pdo);
+            self::markApplied($pdo, self::PHASE_9);
+        }
+        if (!self::isApplied($pdo, self::PHASE_10)) {
+            self::runPhase10($pdo);
+            self::markApplied($pdo, self::PHASE_10);
         }
     }
 
@@ -618,5 +633,104 @@ class MigrationRunner
         self::addColumnIfMissing($pdo, 'approved_leaves', 'approved_by', 'INT UNSIGNED NULL');
         self::addColumnIfMissing($pdo, 'approved_leaves', 'notes', 'TEXT NULL');
         self::addColumnIfMissing($pdo, 'approved_leaves', 'created_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    private static function runPhase8(PDO $pdo): void
+    {
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $isSqlite = $driver === 'sqlite';
+
+        if ($isSqlite) {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS monthly_narrative_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                work_summary TEXT NULL,
+                positives TEXT NULL,
+                negatives TEXT NULL,
+                development_notes TEXT NULL,
+                submitted_at TEXT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, year, month),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS task_replies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (task_id) REFERENCES daily_tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                original_filename TEXT NOT NULL,
+                stored_filename TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                uploaded_by INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
+            )');
+            self::addColumnIfMissing($pdo, 'work_schedule', 'report_submission_days', 'INTEGER NOT NULL DEFAULT 5');
+        } else {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS monthly_narrative_reports (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                year SMALLINT UNSIGNED NOT NULL,
+                month TINYINT UNSIGNED NOT NULL,
+                work_summary TEXT NULL,
+                positives TEXT NULL,
+                negatives TEXT NULL,
+                development_notes TEXT NULL,
+                submitted_at DATETIME NULL,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_narrative_user_month (user_id, year, month),
+                CONSTRAINT fk_narrative_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS task_replies (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                task_id INT UNSIGNED NOT NULL,
+                user_id INT UNSIGNED NOT NULL,
+                message TEXT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_reply_task FOREIGN KEY (task_id) REFERENCES daily_tasks(id) ON DELETE CASCADE,
+                CONSTRAINT fk_reply_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS documents (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                original_filename VARCHAR(255) NOT NULL,
+                stored_filename VARCHAR(255) NOT NULL,
+                mime_type VARCHAR(120) NOT NULL,
+                file_size INT UNSIGNED NOT NULL DEFAULT 0,
+                uploaded_by INT UNSIGNED NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_doc_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+            self::addColumnIfMissing($pdo, 'work_schedule', 'report_submission_days', 'INT UNSIGNED NOT NULL DEFAULT 5');
+        }
+
+        self::grantPhase2Permissions($pdo);
+    }
+
+    /** مزامنة الصلاحيات الافتراضية الجديدة مع الموظفين الحاليين */
+    private static function runPhase9(PDO $pdo): void
+    {
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
+    }
+
+    private static function runPhase10(PDO $pdo): void
+    {
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
     }
 }

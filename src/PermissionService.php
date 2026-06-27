@@ -4,70 +4,106 @@ declare(strict_types=1);
 
 class PermissionService
 {
+    private const ALL_ROLES = [
+        'employee',
+        'admin_assistant',
+        'program_supervisor',
+        'director',
+        'system_admin',
+    ];
+
     /**
-     * الصلاحيات القابلة للتفعيل لكل مستخدم.
+     * الصلاحيات القابلة للتفعيل لكل موظف.
      * defaults = الأدوار التي تحصل على الصلاحية تلقائياً عند الإنشاء.
      */
     public const DEFINITIONS = [
         'sign_attendance' => [
             'label' => 'تسجيل الحضور والانصراف',
-            'defaults' => ['employee', 'admin_assistant', 'program_supervisor', 'director', 'system_admin'],
+            'defaults' => self::ALL_ROLES,
         ],
-        'manage_daily_tasks' => [
-            'label' => 'إدارة المهام اليومية (إضافة/تعديل/حذف)',
-            'defaults' => ['employee', 'program_supervisor'],
-        ],
-        'complete_daily_tasks' => [
-            'label' => 'إتمام المهام اليومية المسندة',
-            'defaults' => ['employee', 'admin_assistant', 'program_supervisor', 'director', 'system_admin'],
-        ],
-        'manage_job_description' => [
-            'label' => 'إدخال التوصيف الوظيفي (مهام العقد)',
-            'defaults' => ['admin_assistant', 'director'],
-        ],
-        'monthly_employee_report' => [
-            'label' => 'تقرير الموظف الشهري وتقييم الأداء',
-            'defaults' => ['program_supervisor', 'director'],
+        'monthly_self_report' => [
+            'label' => 'التقرير الشهري للموظف',
+            'defaults' => self::ALL_ROLES,
         ],
         'view_reports_readonly' => [
-            'label' => 'الاطلاع فقط على التقارير والحضور والغياب',
-            'defaults' => ['admin_assistant', 'director'],
+            'label' => 'الاطلاع على تقارير الموظفين (قراءة فقط)',
+            'defaults' => ['admin_assistant'],
+        ],
+        'monthly_employee_report' => [
+            'label' => 'تقييم تقارير الموظفين والأداء',
+            'defaults' => ['program_supervisor', 'director'],
+        ],
+        'complete_own_tasks' => [
+            'label' => 'إتمام المهام المسندة إلي',
+            'defaults' => self::ALL_ROLES,
+        ],
+        'respond_complete_tasks' => [
+            'label' => 'الرد على الملاحظات وإتمام المهام',
+            'defaults' => ['program_supervisor', 'director'],
+        ],
+        'manage_job_description' => [
+            'label' => 'إدخال التوصيف الوظيفي',
+            'defaults' => ['admin_assistant', 'program_supervisor', 'director'],
         ],
         'daily_notes_to_director' => [
-            'label' => 'تقديم ملاحظات يومية للمدير العام',
-            'defaults' => ['admin_assistant'],
+            'label' => 'تقديم ملاحظات يومية للمدير',
+            'defaults' => self::ALL_ROLES,
+        ],
+        'assign_main_tasks' => [
+            'label' => 'إعطاء المهام لمشرفي الدوائر',
+            'defaults' => ['director'],
+        ],
+        'manage_daily_tasks' => [
+            'label' => 'إدارة المهام اليومية (إسناد وتعديل)',
+            'defaults' => ['program_supervisor', 'director'],
         ],
         'print_archive_reports' => [
-            'label' => 'طباعة الكشوف وأرشفتها',
+            'label' => 'طباعة الكشوف',
             'defaults' => ['admin_assistant'],
         ],
-        'transfer_employee' => [
-            'label' => 'نقل موظف من دائرة إلى أخرى',
+        'manage_documents' => [
+            'label' => 'رفع المستندات',
+            'defaults' => ['admin_assistant'],
+        ],
+        'view_documents' => [
+            'label' => 'تحميل المستندات',
+            'defaults' => ['admin_assistant'],
+        ],
+        'manage_work_schedule' => [
+            'label' => 'تحديد ساعات الدوام',
             'defaults' => ['director'],
+        ],
+        'manage_report_deadline' => [
+            'label' => 'تحديد مهلة تقديم التقرير السردي',
+            'defaults' => ['director'],
+        ],
+        'transfer_employee' => [
+            'label' => 'نقل الموظفين بين الدوائر',
+            'defaults' => ['director', 'program_supervisor'],
+        ],
+        'borrow_employee' => [
+            'label' => 'الاستعارة المؤقتة من دائرة أخرى',
+            'defaults' => ['director', 'program_supervisor'],
+        ],
+        'manage_users' => [
+            'label' => 'إدارة الموظفين (إضافة وتعديل)',
+            'defaults' => ['director'],
+        ],
+        'manage_permissions' => [
+            'label' => 'تعديل صلاحيات الموظفين',
+            'defaults' => ['director', 'system_admin'],
+        ],
+        'manage_locations' => [
+            'label' => 'إدارة المواقع الجغرافية',
+            'defaults' => ['admin_assistant'],
         ],
         'manage_departments' => [
             'label' => 'إدارة الدوائر ومشرفيها',
-            'defaults' => ['system_admin', 'director'],
-        ],
-        'manage_work_schedule' => [
-            'label' => 'تحديد ساعات الدوام الرسمي',
-            'defaults' => ['system_admin', 'director'],
-        ],
-        'manage_locations' => [
-            'label' => 'إدارة المواقع الجغرافية للمؤسسة',
-            'defaults' => ['system_admin'],
-        ],
-        'assign_main_tasks' => [
-            'label' => 'إعطاء المهام الرئيسية لمشرفي الدوائر',
             'defaults' => ['director'],
         ],
-        'manage_users' => [
-            'label' => 'إدارة المستخدمين والصلاحيات',
-            'defaults' => ['system_admin', 'director', 'program_supervisor'],
-        ],
-        'borrow_employee' => [
-            'label' => 'استخدام موظف من دائرة أخرى مؤقتاً',
-            'defaults' => ['system_admin', 'director', 'program_supervisor'],
+        'manage_system' => [
+            'label' => 'إعدادات النظام (تدقيق، نسخ احتياطي)',
+            'defaults' => ['director'],
         ],
     ];
 
@@ -76,18 +112,86 @@ class PermissionService
         return self::DEFINITIONS;
     }
 
+    /** مجموعة الصلاحيات التي يمكن للمدير/مدير النظام إسنادها لأي موظف */
+    public static function assignablePool(): array
+    {
+        return self::DEFINITIONS;
+    }
+
+    public static function canGrantToOthers(int $grantorId, string $grantorRole): bool
+    {
+        if (RoleHelper::canEditPermissions($grantorRole)) {
+            return true;
+        }
+
+        return self::can($grantorId, 'manage_permissions');
+    }
+
+    /** الصلاحيات مجمّعة للعرض في واجهة الاختيار */
+    public static function groupedForPicker(): array
+    {
+        $groups = [
+            'employee' => ['title' => 'صلاحيات الموظف', 'codes' => []],
+            'management' => ['title' => 'صلاحيات الإدارة', 'codes' => []],
+            'system' => ['title' => 'صلاحيات النظام', 'codes' => []],
+        ];
+        $map = [
+            'sign_attendance' => 'employee',
+            'monthly_self_report' => 'employee',
+            'complete_own_tasks' => 'employee',
+            'daily_notes_to_director' => 'employee',
+            'view_reports_readonly' => 'management',
+            'monthly_employee_report' => 'management',
+            'respond_complete_tasks' => 'management',
+            'manage_job_description' => 'management',
+            'assign_main_tasks' => 'management',
+            'manage_daily_tasks' => 'management',
+            'print_archive_reports' => 'management',
+            'manage_documents' => 'management',
+            'view_documents' => 'management',
+            'transfer_employee' => 'management',
+            'borrow_employee' => 'management',
+            'manage_users' => 'management',
+            'manage_permissions' => 'management',
+            'manage_departments' => 'management',
+            'manage_work_schedule' => 'system',
+            'manage_report_deadline' => 'system',
+            'manage_locations' => 'system',
+            'manage_system' => 'system',
+        ];
+        foreach (array_keys(self::DEFINITIONS) as $code) {
+            $group = $map[$code] ?? 'management';
+            $groups[$group]['codes'][] = $code;
+        }
+
+        return $groups;
+    }
+
+    /** خريطة الصلاحيات الافتراضية لكل دور — للواجهة */
+    public static function roleDefaultsMap(): array
+    {
+        $map = [];
+        foreach (self::ALL_ROLES as $role) {
+            $map[$role] = self::defaultCodesForRole($role);
+        }
+
+        return $map;
+    }
+
     public static function defaultCodesForRole(string $role): array
     {
         $role = RoleHelper::normalizeRole($role);
+        if ($role === 'system_admin') {
+            return array_keys(self::DEFINITIONS);
+        }
+
         $codes = [];
         foreach (self::DEFINITIONS as $code => $def) {
             if (in_array($role, $def['defaults'], true)) {
                 $codes[] = $code;
             }
         }
-        if ($role === 'system_admin') {
-            $codes = array_keys(self::DEFINITIONS);
-        }
+
         return array_values(array_unique($codes));
     }
 
@@ -96,7 +200,7 @@ class PermissionService
         self::setForUser($userId, self::defaultCodesForRole($role));
     }
 
-    /** يضيف الصلاحيات الافتراضية الناقصة عند إنشاء المستخدم فقط — لا يُستدعى عند تسجيل الدخول */
+    /** يضيف الصلاحيات الافتراضية الناقصة — لا يُستدعى عند تسجيل الدخول */
     public static function syncMissingDefaults(int $userId, string $role): void
     {
         $role = RoleHelper::normalizeRole($role);
@@ -131,6 +235,7 @@ class PermissionService
         if ($role === 'system_admin') {
             return true;
         }
+
         return in_array($role, self::DEFINITIONS[$code]['defaults'], true);
     }
 

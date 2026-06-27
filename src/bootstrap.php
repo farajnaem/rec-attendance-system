@@ -39,6 +39,8 @@ function rec_load_core(): void
     require_once $root . '/src/LoginRateLimiter.php';
     require_once $root . '/src/LeaveService.php';
     require_once $root . '/src/NotificationService.php';
+    require_once $root . '/src/NarrativeReportService.php';
+    require_once $root . '/src/DocumentService.php';
 }
 
 function rec_run_migrations_if_enabled(): void

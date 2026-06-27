@@ -6,7 +6,7 @@
     إذا لم تتطابق تظهر رسالة خطأ ولن يُقبل التسجيل.
 </p>
 
-<div class="card">
+<div class="card" id="addLocationPanel" hidden>
     <h2>إضافة موقع</h2>
     <form method="post" action="<?= e(url('/manager/locations/create')) ?>" id="createLocationForm">
         <?= Csrf::field() ?>
@@ -41,11 +41,15 @@
             </button>
         </div>
         <button type="submit" class="btn">إضافة الموقع</button>
+        <button type="button" class="btn btn-outline" onclick="toggleAddPanel('addLocationPanel', false)">إلغاء</button>
     </form>
 </div>
 
 <div class="card">
-    <h2>المواقع المسجّلة</h2>
+    <div class="card-header-row">
+        <h2>المواقع المسجّلة</h2>
+        <button type="button" class="btn" onclick="toggleAddPanel('addLocationPanel')">+ إضافة</button>
+    </div>
     <?php if (empty($locations)): ?>
     <p class="text-muted">لا توجد مواقع بعد. أضف موقعاً لتفعيل التحقق الجغرافي عند الحضور.</p>
     <?php else: foreach ($locations as $loc): ?>

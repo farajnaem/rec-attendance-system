@@ -1,5 +1,5 @@
-<?php $title = 'تعديل مستخدم: ' . e($user['name']); ?>
-<h1>تعديل المستخدم</h1>
+<?php $title = 'تعديل موظف: ' . e($user['name']); ?>
+<h1>تعديل الموظف</h1>
 <p class="text-muted">عدّل بيانات <?= e($user['name']) ?> ثم احفظ التغييرات.</p>
 
 <div class="card">
@@ -83,7 +83,7 @@
         </div>
         <div style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem">
             <button type="submit" class="btn">حفظ التعديلات</button>
-            <?php if ($canAssignPermissions && (int)$user['id'] !== Auth::id()): ?>
+            <?php if (!empty($canEditPermissions) && (int)$user['id'] !== Auth::id()): ?>
             <a href="<?= e(url('/manager/users/permissions?id=' . (int)$user['id'])) ?>" class="btn btn-outline">الصلاحيات</a>
             <?php endif; ?>
             <a href="<?= e(url('/manager/users')) ?>" class="btn btn-outline">رجوع للقائمة</a>

@@ -18,8 +18,12 @@
 </div>
 
 <div class="card">
-    <h2>المهام الفرعية</h2>
-    <form method="post" action="<?= e(url('/manager/job-description/create')) ?>" style="margin-bottom:1.5rem">
+    <div class="card-header-row">
+        <h2>المهام الفرعية</h2>
+        <button type="button" class="btn" onclick="toggleAddPanel('addDutyPanel')">+ إضافة</button>
+    </div>
+    <div id="addDutyPanel" hidden style="margin-bottom:1.5rem">
+    <form method="post" action="<?= e(url('/manager/job-description/create')) ?>">
         <?= Csrf::field() ?>
         <input type="hidden" name="user_id" value="<?= (int)$user['id'] ?>">
         <div class="form-group" style="display:flex;gap:0.5rem;align-items:end;flex-wrap:wrap">
@@ -29,8 +33,10 @@
                        placeholder="مثال: إعداد التقارير الشهرية">
             </div>
             <button type="submit" class="btn">إضافة</button>
+            <button type="button" class="btn btn-outline" onclick="toggleAddPanel('addDutyPanel', false)">إلغاء</button>
         </div>
     </form>
+    </div>
 
     <?php if (empty($tasks)): ?>
     <p class="text-muted">لا توجد مهام فرعية بعد.</p>

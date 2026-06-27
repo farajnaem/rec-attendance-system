@@ -7,8 +7,8 @@ declare(strict_types=1);
  * الإنتاج يستخدم Docker + MySQL.
  */
 
-require dirname(__DIR__) . '/config/config.php';
-require dirname(__DIR__) . '/src/Database.php';
+require dirname(__DIR__) . '/src/bootstrap.php';
+rec_load_core();
 
 if ((getenv('DB_DRIVER') ?: 'mysql') !== 'sqlite') {
     echo "install.php للتطوير المحلي بـ SQLite فقط.\n";
@@ -20,6 +20,7 @@ $pdo = Database::getConnection();
 
 $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")->fetch();
 if ($tables) {
+    MigrationRunner::ensureLatest();
     echo "قاعدة البيانات جاهزة.\n";
     exit(0);
 }
@@ -92,4 +93,7 @@ CREATE TABLE task_evaluations (
 ');
 
 echo "تم إنشاء قاعدة البيانات.\n";
+
+MigrationRunner::ensureLatest();
+echo "تم تطبيق التحديثات.\n";
 echo "فعّل SETUP_ENABLED=true ثم افتح /setup.php لإنشاء حساب المسؤول.\n";

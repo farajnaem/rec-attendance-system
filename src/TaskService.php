@@ -195,4 +195,75 @@ class TaskService
         }
         return false;
     }
+
+    public static function addReply(int $taskId, int $userId, string $message): int
+    {
+        $message = trim($message);
+        if ($message === '') {
+            throw new InvalidArgumentException('الرد لا يمكن أن يكون فارغاً.');
+        }
+
+        $task = self::getById($taskId);
+        if (!$task) {
+            throw new RuntimeException('المهمة غير موجودة.');
+        }
+        if ((int) $task['employee_id'] !== $userId) {
+            throw new RuntimeException('يمكن للموظف المُكلَّف فقط إضافة رد على المهمة.');
+        }
+
+        $pdo = Database::getConnection();
+        $pdo->prepare(
+            'INSERT INTO task_replies (task_id, user_id, message) VALUES (?, ?, ?)'
+        )->execute([$taskId, $userId, $message]);
+
+        $replyId = (int) $pdo->lastInsertId();
+        $employee = UserService::getById($userId);
+        NotificationService::taskReply(
+            (int) $task['assigned_by'],
+            (string) $task['title'],
+            $message,
+            $employee['name'] ?? 'موظف'
+        );
+
+        return $replyId;
+    }
+
+    public static function repliesForTask(int $taskId): array
+    {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare(
+            'SELECT r.*, u.name AS author_name
+             FROM task_replies r
+             JOIN users u ON u.id = r.user_id
+             WHERE r.task_id = ?
+             ORDER BY r.created_at ASC'
+        );
+        $stmt->execute([$taskId]);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function repliesForTasks(array $taskIds): array
+    {
+        $taskIds = array_values(array_filter(array_map('intval', $taskIds)));
+        if ($taskIds === []) {
+            return [];
+        }
+        $pdo = Database::getConnection();
+        $ph = implode(',', array_fill(0, count($taskIds), '?'));
+        $stmt = $pdo->prepare(
+            "SELECT r.*, u.name AS author_name
+             FROM task_replies r
+             JOIN users u ON u.id = r.user_id
+             WHERE r.task_id IN ($ph)
+             ORDER BY r.created_at ASC"
+        );
+        $stmt->execute($taskIds);
+        $grouped = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $grouped[(int) $row['task_id']][] = $row;
+        }
+
+        return $grouped;
+    }
 }

@@ -1,7 +1,7 @@
 <?php $title = 'إدارة المهام'; ?>
 <h1>إدارة المهام اليومية</h1>
 
-<div class="card">
+<div class="card" id="addTaskPanel" hidden>
     <h2>إضافة مهمة جديدة</h2>
     <form method="post" action="<?= e(url('/manager/tasks/create')) ?>">
         <?= Csrf::field() ?>
@@ -27,26 +27,48 @@
             <label>الوصف</label>
             <textarea name="description" class="form-control" rows="3"></textarea>
         </div>
-        <button type="submit" class="btn">إضافة المهمة</button>
+        <div style="display:flex;gap:0.5rem">
+            <button type="submit" class="btn">إضافة المهمة</button>
+            <button type="button" class="btn btn-outline" onclick="toggleAddPanel('addTaskPanel', false)">إلغاء</button>
+        </div>
     </form>
 </div>
 
 <div class="card">
-    <h2>قائمة المهام</h2>
+    <div class="card-header-row">
+        <h2>قائمة المهام</h2>
+        <button type="button" class="btn" onclick="toggleAddPanel('addTaskPanel')">+ إضافة</button>
+    </div>
     <table>
         <thead>
-            <tr><th>التاريخ</th><th>الموظف</th><th>المهمة</th><th>الحالة</th><th>الدرجة</th><th>إجراء</th></tr>
+            <tr><th>التاريخ</th><th>الموظف</th><th>المهمة</th><th>الحالة</th><th>الدرجة</th><th>ردود الموظف</th><th>إجراء</th></tr>
         </thead>
         <tbody>
         <?php if (empty($tasks)): ?>
-            <tr><td colspan="6">لا توجد مهام</td></tr>
+            <tr><td colspan="7">لا توجد مهام</td></tr>
         <?php else: foreach ($tasks as $t): ?>
+        <?php $replies = $taskReplies[(int)$t['id']] ?? []; ?>
         <tr>
             <td><?= e($t['task_date']) ?></td>
             <td><?= e($t['employee_name']) ?></td>
             <td><strong><?= e($t['title']) ?></strong></td>
             <td><span class="badge badge-<?= e($t['status']) ?>"><?= e(statusLabel($t['status'])) ?></span></td>
             <td><?= isset($t['score']) && $t['score'] !== null ? e((string)$t['score']) . '/10' : '—' ?></td>
+            <td>
+                <?php if (empty($replies)): ?>
+                <span class="text-muted">—</span>
+                <?php else: ?>
+                <details>
+                    <summary><?= count($replies) ?> رد</summary>
+                    <ul style="margin:0.5rem 0 0;padding-right:1rem;font-size:0.9rem">
+                    <?php foreach ($replies as $r): ?>
+                    <li><strong><?= e($r['author_name']) ?>:</strong> <?= e($r['message']) ?>
+                        <small class="text-muted">(<?= e(substr($r['created_at'], 0, 16)) ?>)</small></li>
+                    <?php endforeach; ?>
+                    </ul>
+                </details>
+                <?php endif; ?>
+            </td>
             <td>
                 <?php if ($t['status'] === 'completed'): ?>
                 <a href="<?= e(url('/manager/evaluate?id=' . (int)$t['id'])) ?>" class="btn btn-warning">تقييم</a>

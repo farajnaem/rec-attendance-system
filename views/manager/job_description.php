@@ -9,7 +9,7 @@
     <table>
         <thead>
             <tr>
-                <th>المستخدم</th>
+                <th>الموظف</th>
                 <th>المسمى الوظيفي</th>
                 <th>المهام الفرعية</th>
                 <th>إجراء</th>
@@ -17,7 +17,7 @@
         </thead>
         <tbody>
         <?php if (empty($users)): ?>
-            <tr><td colspan="4">لا يوجد مستخدمون نشطون</td></tr>
+            <tr><td colspan="4">لا يوجد موظفون نشطون</td></tr>
         <?php else: foreach ($users as $u): ?>
             <tr>
                 <td><?= e($u['name']) ?></td>

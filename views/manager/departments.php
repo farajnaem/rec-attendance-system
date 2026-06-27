@@ -2,7 +2,7 @@
 <h1>إدارة الدوائر</h1>
 <p class="text-muted">أضف دوائر المؤسسة وعيّن مشرف برنامج لكل دائرة. متاح لمدير النظام والمدير.</p>
 
-<div class="card">
+<div class="card" id="addDeptPanel" hidden>
     <h2>دائرة جديدة</h2>
     <form method="post" action="<?= e(url('/manager/departments/create')) ?>">
         <?= Csrf::field() ?>
@@ -27,14 +27,20 @@
                 <input type="text" name="description" class="form-control" placeholder="وصف مختصر للدائرة">
             </div>
         </div>
-        <button type="submit" class="btn">إضافة الدائرة</button>
+        <div style="display:flex;gap:0.5rem;margin-top:1rem">
+            <button type="submit" class="btn">إضافة الدائرة</button>
+            <button type="button" class="btn btn-outline" onclick="toggleAddPanel('addDeptPanel', false)">إلغاء</button>
+        </div>
     </form>
 </div>
 
 <div class="card">
-    <h2>الدوائر المسجّلة</h2>
+    <div class="card-header-row">
+        <h2>الدوائر المسجّلة</h2>
+        <button type="button" class="btn" onclick="toggleAddPanel('addDeptPanel')">+ إضافة</button>
+    </div>
     <?php if (empty($departments)): ?>
-        <p class="text-muted">لا توجد دوائر بعد — أضف أول دائرة أعلاه.</p>
+        <p class="text-muted">لا توجد دوائر بعد.</p>
     <?php else: ?>
     <table>
         <thead>

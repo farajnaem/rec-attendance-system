@@ -52,7 +52,7 @@
 
 <div class="card">
     <table>
-        <thead><tr><th>المستخدم</th><th>النوع</th><th>التاريخ</th><th>التوقيت</th><th>موقع العمل</th><th>تفاصيل</th></tr></thead>
+        <thead><tr><th>الموظف</th><th>النوع</th><th>التاريخ</th><th>التوقيت</th><th>موقع العمل</th><th>تفاصيل</th></tr></thead>
         <tbody>
         <?php if (empty($records)): ?>
             <tr><td colspan="6">لا توجد سجلات في هذه الفترة</td></tr>

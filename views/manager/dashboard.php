@@ -59,7 +59,7 @@
 <div class="grid-2">
     <?php if (Auth::can('manage_users')): ?>
     <a href="<?= e(url('/manager/users')) ?>" class="card link-card">
-        <h3>إدارة المستخدمين</h3>
+        <h3>إدارة الموظفين</h3>
         <p class="text-muted">إضافة موظفين وتعديل الصلاحيات</p>
     </a>
     <?php endif; ?>
@@ -69,16 +69,10 @@
         <p class="text-muted">إدارة الدوائر ومشرفيها</p>
     </a>
     <?php endif; ?>
-    <?php if (RoleHelper::isOrgAdmin(Auth::role())): ?>
-    <a href="<?= e(url('/manager/work-schedule')) ?>" class="card link-card">
-        <h3>ساعات الدوام</h3>
-        <p class="text-muted">تحديد أوقات العمل الرسمية</p>
-    </a>
-    <?php endif; ?>
-    <?php if (Auth::can('manage_locations')): ?>
-    <a href="<?= e(url('/manager/locations')) ?>" class="card link-card">
-        <h3>مواقع العمل</h3>
-        <p class="text-muted">إحداثيات GPS للحضور</p>
+    <?php if (RoleHelper::isOrgAdmin(Auth::role()) || Auth::can('manage_work_schedule') || Auth::can('manage_locations') || Auth::can('borrow_employee') || RoleHelper::isSystemAdmin(Auth::role())): ?>
+    <a href="<?= e(url('/manager/system')) ?>" class="card link-card">
+        <h3>إعدادات النظام</h3>
+        <p class="text-muted">ساعات الدوام، المواقع، الاستعارة، التدقيق، والنسخ الاحتياطي</p>
     </a>
     <?php endif; ?>
     <?php if (Auth::can('manage_job_description')): ?>

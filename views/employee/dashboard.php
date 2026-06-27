@@ -245,20 +245,50 @@
         <?php if (empty($tasks)): ?>
             <tr><td colspan="5" class="text-muted">لا توجد مهام</td></tr>
         <?php else: foreach ($tasks as $t): ?>
+            <?php $replies = $taskReplies[(int)$t['id']] ?? []; ?>
             <tr>
                 <td><?= e($t['task_date']) ?></td>
-                <td><strong><?= e($t['title']) ?></strong><br><small><?= e($t['description'] ?? '') ?></small></td>
+                <td>
+                    <strong><?= e($t['title']) ?></strong><br><small><?= e($t['description'] ?? '') ?></small>
+                    <?php if (!empty($replies)): ?>
+                    <div style="margin-top:0.5rem;font-size:0.85rem;color:var(--muted)">
+                        <?php foreach ($replies as $r): ?>
+                        <div><strong><?= e($r['author_name']) ?>:</strong> <?= e($r['message']) ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+                </td>
                 <td><span class="badge badge-<?= e($t['status']) ?>"><?= e(statusLabel($t['status'])) ?></span></td>
                 <td><?= $t['score'] !== null ? e((string)$t['score']) . '/10' : '—' ?></td>
-                <td>
-                    <?php if ($t['status'] === 'pending' && (Auth::can('complete_daily_tasks') || Auth::can('manage_daily_tasks'))): ?>
+                <td class="text-nowrap">
+                    <?php if ($t['status'] === 'pending' && Auth::can('complete_own_tasks')): ?>
                     <button type="button" class="btn btn-success" onclick="openCompleteModal(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')">أتممت العمل</button>
-                    <?php else: ?>—<?php endif; ?>
+                    <?php endif; ?>
+                    <?php if ((int)$t['assigned_by'] !== Auth::id()): ?>
+                    <button type="button" class="btn btn-outline" style="margin-top:0.25rem"
+                            onclick="openReplyModal(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')">رد / ملاحظة</button>
+                    <?php endif; ?>
                 </td>
             </tr>
         <?php endforeach; endif; ?>
         </tbody>
     </table>
+</div>
+
+<div id="replyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;">
+    <div class="card" style="max-width:420px;margin:2rem;">
+        <h3 id="replyModalTitle">رد على المهمة</h3>
+        <form method="post" action="<?= e(url('/employee/task/reply')) ?>">
+            <?= Csrf::field() ?>
+            <input type="hidden" name="task_id" id="replyTaskId">
+            <div class="form-group">
+                <label>الرد أو الملاحظة</label>
+                <textarea name="message" class="form-control" rows="3" required placeholder="اكتب ردك أو ملاحظتك — ستصل مباشرة لمعطي المهمة"></textarea>
+            </div>
+            <button type="submit" class="btn">إرسال</button>
+            <button type="button" class="btn btn-outline" onclick="closeReplyModal()">إلغاء</button>
+        </form>
+    </div>
 </div>
 
 <div id="completeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;">
@@ -290,6 +320,14 @@ function openCompleteModal(id, title) {
 }
 function closeCompleteModal() {
     document.getElementById('completeModal').style.display = 'none';
+}
+function openReplyModal(id, title) {
+    document.getElementById('replyTaskId').value = id;
+    document.getElementById('replyModalTitle').textContent = 'رد على: ' + title;
+    document.getElementById('replyModal').style.display = 'flex';
+}
+function closeReplyModal() {
+    document.getElementById('replyModal').style.display = 'none';
 }
 <?php if (!empty($gpsRequired) && Auth::can('sign_attendance')): ?>
 var WORK_LOCATIONS = <?= json_encode($workLocations ?? [], JSON_UNESCAPED_UNICODE) ?>;

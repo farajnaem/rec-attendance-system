@@ -1,31 +1,28 @@
 <?php $title = 'صلاحيات: ' . e($user['name']); ?>
-<h1>صلاحيات المستخدم</h1>
+<h1>صلاحيات الموظف</h1>
 <p class="text-muted">
     <?= e($user['name']) ?> — <?= e(RoleHelper::label($user['role'])) ?> — <?= e($user['email']) ?>
 </p>
 
 <div class="card">
-    <form method="post" action="<?= e(url('/manager/users/permissions')) ?>">
+    <form method="post" action="<?= e(url('/manager/users/permissions')) ?>" id="permissionsForm">
         <?= Csrf::field() ?>
         <input type="hidden" name="user_id" value="<?= (int)$user['id'] ?>">
-        <p class="text-muted">فعّل الصلاحيات المناسبة لهذا المستخدم. يحددها مدير النظام أو المدير فقط.</p>
-        <div style="display:grid;gap:0.75rem">
-            <?php foreach (PermissionService::allDefinitions() as $code => $def): ?>
-            <label style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.5rem;border:1px solid var(--border);border-radius:8px">
-                <input type="checkbox" name="permissions[]" value="<?= e($code) ?>"
-                    <?= in_array($code, $granted, true) ? 'checked' : '' ?>>
-                <span>
-                    <strong><?= e($def['label']) ?></strong>
-                    <?php if (in_array(RoleHelper::normalizeRole($user['role']), $def['defaults'], true)): ?>
-                    <small class="text-muted"> (افتراضي للدور)</small>
-                    <?php endif; ?>
-                </span>
-            </label>
-            <?php endforeach; ?>
-        </div>
-        <div style="margin-top:1rem;display:flex;gap:0.5rem">
+        <p class="text-muted">
+            اختر من <a href="<?= e(url('/manager/permissions')) ?>">مجموعة صلاحيات النظام</a>
+            ما يناسب هذا الموظف. يمكنك استخدام «افتراضيات الدور» ثم التعديل.
+        </p>
+        <?php partial('partials/permission_picker', [
+            'granted' => $granted,
+            'targetRole' => $user['role'],
+            'showRolePreview' => true,
+            'rolePreviewId' => 'rolePreview',
+        ]); ?>
+        <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
             <button type="submit" class="btn">حفظ الصلاحيات</button>
-            <a href="<?= e(url('/manager/users')) ?>" class="btn btn-outline">رجوع للمستخدمين</a>
+            <button type="button" class="btn btn-outline" onclick="applyRoleDefaults()">استعادة افتراضيات الدور</button>
+            <a href="<?= e(url('/manager/permissions')) ?>" class="btn btn-outline">مجموعة الصلاحيات</a>
+            <a href="<?= e(url('/manager/users')) ?>" class="btn btn-outline">رجوع للموظفين</a>
             <a href="<?= e(url('/manager/users/edit?id=' . (int)$user['id'])) ?>" class="btn btn-outline">تعديل البيانات</a>
         </div>
     </form>

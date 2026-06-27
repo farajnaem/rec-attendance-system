@@ -204,8 +204,8 @@ class UserService
 
     public static function updatePermissions(int $userId, array $permissions, int $actorId, string $actorRole): void
     {
-        if (!RoleHelper::canAssignPermissions($actorRole)) {
-            throw new RuntimeException('لا يمكنك تعديل الصلاحيات.');
+        if (!RoleHelper::canEditPermissions($actorRole)) {
+            throw new RuntimeException('لا يمكنك تعديل الصلاحيات — متاح للمدير ومدير النظام فقط.');
         }
         $user = self::getById($userId);
         if (!$user) {

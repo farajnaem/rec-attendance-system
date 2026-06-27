@@ -127,15 +127,85 @@ class CrossDepartmentService
         return array_map('intval', array_column($stmt->fetchAll(), 'user_id'));
     }
 
-    public static function assertCanAssign(int $actorId, string $actorRole): void
+    public static function assertCanAssign(int $actorId, string $actorRole, ?int $targetDepartmentId = null): void
     {
         $role = RoleHelper::normalizeRole($actorRole);
         if (in_array($role, ['system_admin', 'director'], true)) {
             return;
         }
         if ($role === 'program_supervisor' && PermissionService::can($actorId, 'borrow_employee')) {
+            if ($targetDepartmentId !== null) {
+                $deptIds = ScopeService::supervisedDepartmentIds($actorId);
+                if (!in_array($targetDepartmentId, $deptIds, true)) {
+                    throw new RuntimeException('يمكنك استعارة الموظف لدائرة تشرف عليها فقط.');
+                }
+            }
             return;
         }
         throw new RuntimeException('لا يمكنك تعيين موظف من دائرة أخرى.');
+    }
+
+    /** موظفون من دوائر أخرى يمكن استعارتهم */
+    public static function borrowableEmployees(int $actorId, string $actorRole): array
+    {
+        self::assertCanAssign($actorId, $actorRole);
+        $pdo = Database::getConnection();
+        $role = RoleHelper::normalizeRole($actorRole);
+        $excludeDeptIds = [];
+        if ($role === 'program_supervisor') {
+            $excludeDeptIds = ScopeService::supervisedDepartmentIds($actorId);
+        }
+
+        $sql = 'SELECT u.id, u.name, u.email, d.name AS department_name, d.id AS department_id
+                FROM users u
+                JOIN user_departments ud ON ud.user_id = u.id AND ud.is_current = 1
+                JOIN departments d ON d.id = ud.department_id
+                WHERE u.is_active = 1 AND u.role = "employee"';
+        if ($excludeDeptIds !== []) {
+            $ph = implode(',', array_fill(0, count($excludeDeptIds), '?'));
+            $sql .= " AND ud.department_id NOT IN ($ph)";
+            $stmt = $pdo->prepare($sql . ' ORDER BY d.name, u.name');
+            $stmt->execute($excludeDeptIds);
+        } else {
+            $stmt = $pdo->query($sql . ' ORDER BY d.name, u.name');
+        }
+
+        return $stmt->fetchAll();
+    }
+
+    public static function activeBorrowingsForActor(int $actorId, string $actorRole): array
+    {
+        $pdo = Database::getConnection();
+        $role = RoleHelper::normalizeRole($actorRole);
+        if (in_array($role, ['system_admin', 'director'], true)) {
+            $stmt = $pdo->query(
+                'SELECT c.*, u.name AS employee_name, d.name AS target_department_name, h.name AS home_department_name
+                 FROM cross_department_assignments c
+                 JOIN users u ON u.id = c.user_id
+                 JOIN departments d ON d.id = c.target_department_id
+                 JOIN departments h ON h.id = c.home_department_id
+                 WHERE c.is_active = 1
+                 ORDER BY c.id DESC'
+            );
+            return $stmt->fetchAll();
+        }
+
+        $deptIds = ScopeService::supervisedDepartmentIds($actorId);
+        if (empty($deptIds)) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($deptIds), '?'));
+        $stmt = $pdo->prepare(
+            "SELECT c.*, u.name AS employee_name, d.name AS target_department_name, h.name AS home_department_name
+             FROM cross_department_assignments c
+             JOIN users u ON u.id = c.user_id
+             JOIN departments d ON d.id = c.target_department_id
+             JOIN departments h ON h.id = c.home_department_id
+             WHERE c.is_active = 1 AND c.target_department_id IN ($ph)
+             ORDER BY c.id DESC"
+        );
+        $stmt->execute($deptIds);
+
+        return $stmt->fetchAll();
     }
 }

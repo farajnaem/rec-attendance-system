@@ -8,6 +8,13 @@ $navActive = static function (string ...$paths) use ($route): string {
     }
     return '';
 };
+$canSystem = Auth::can('manage_work_schedule')
+    || Auth::can('manage_report_deadline')
+    || Auth::can('manage_locations')
+    || Auth::can('borrow_employee')
+    || Auth::can('transfer_employee')
+    || Auth::can('manage_system')
+    || RoleHelper::isSystemAdmin(Auth::role());
 ?>
 <nav class="rd-sidebar-nav" aria-label="القائمة الرئيسية">
     <div class="rd-nav-section">الموظف</div>
@@ -21,10 +28,12 @@ $navActive = static function (string ...$paths) use ($route): string {
         <span>تسجيل الحضور</span>
     </a>
     <?php endif; ?>
+    <?php if (Auth::can('monthly_self_report')): ?>
     <a class="rd-nav-link<?= $navActive('/employee/report') ?>" href="<?= e(url('/employee/report')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span>
         <span>تقريري الشهري</span>
     </a>
+    <?php endif; ?>
     <a class="rd-nav-link" href="<?= e(url('/employee/dashboard')) ?>#leaves">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
         <span>الإجازات</span>
@@ -33,6 +42,12 @@ $navActive = static function (string ...$paths) use ($route): string {
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></span>
         <span>التوصيف الوظيفي</span>
     </a>
+    <?php if (Auth::can('manage_documents') || Auth::can('view_documents')): ?>
+    <a class="rd-nav-link<?= $navActive('/documents') ?>" href="<?= e(url('/documents')) ?>">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+        <span>المستندات</span>
+    </a>
+    <?php endif; ?>
 
     <?php if (!RoleHelper::isEmployee(Auth::role())): ?>
     <div class="rd-nav-section">الإدارة</div>
@@ -43,25 +58,19 @@ $navActive = static function (string ...$paths) use ($route): string {
     <?php if (Auth::can('manage_users')): ?>
     <a class="rd-nav-link<?= $navActive('/manager/users') ?>" href="<?= e(url('/manager/users')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-        <span>المستخدمون</span>
+        <span>الموظفون</span>
+    </a>
+    <?php endif; ?>
+    <?php if (RoleHelper::canEditPermissions(Auth::role())): ?>
+    <a class="rd-nav-link<?= $navActive('/manager/permissions', '/manager/users/permissions') ?>" href="<?= e(url('/manager/permissions')) ?>">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+        <span>مجموعة الصلاحيات</span>
     </a>
     <?php endif; ?>
     <?php if (Auth::can('manage_departments')): ?>
     <a class="rd-nav-link<?= $navActive('/manager/departments') ?>" href="<?= e(url('/manager/departments')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>
         <span>الدوائر</span>
-    </a>
-    <?php endif; ?>
-    <?php if (RoleHelper::isOrgAdmin(Auth::role())): ?>
-    <a class="rd-nav-link<?= $navActive('/manager/work-schedule') ?>" href="<?= e(url('/manager/work-schedule')) ?>">
-        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
-        <span>ساعات الدوام</span>
-    </a>
-    <?php endif; ?>
-    <?php if (Auth::can('manage_locations')): ?>
-    <a class="rd-nav-link<?= $navActive('/manager/locations') ?>" href="<?= e(url('/manager/locations')) ?>">
-        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
-        <span>مواقع العمل</span>
     </a>
     <?php endif; ?>
     <?php if (Auth::can('manage_job_description')): ?>
@@ -92,15 +101,11 @@ $navActive = static function (string ...$paths) use ($route): string {
     </a>
     <?php endif; ?>
 
-    <?php if (RoleHelper::isSystemAdmin(Auth::role())): ?>
-    <div class="rd-nav-section">النظام</div>
-    <a class="rd-nav-link<?= $navActive('/manager/audit') ?>" href="<?= e(url('/manager/audit')) ?>">
-        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
-        <span>سجل التدقيق</span>
-    </a>
-    <a class="rd-nav-link<?= $navActive('/manager/database') ?>" href="<?= e(url('/manager/database')) ?>">
-        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
-        <span>نسخ احتياطي</span>
+    <?php if ($canSystem): ?>
+    <div class="rd-nav-section">إدارة النظام</div>
+    <a class="rd-nav-link<?= $navActive('/manager/system', '/manager/work-schedule', '/manager/locations', '/manager/borrow-employee', '/manager/audit', '/manager/database') ?>" href="<?= e(url('/manager/system')) ?>">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+        <span>إعدادات النظام</span>
     </a>
     <?php endif; ?>
 </nav>
