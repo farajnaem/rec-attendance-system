@@ -924,6 +924,10 @@ class MigrationRunner
             PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
         }
 
-        ContractService::enforceAllExpired();
+        try {
+            ContractService::enforceAllExpired();
+        } catch (Throwable $e) {
+            error_log('ContractService::enforceAllExpired during migration: ' . $e->getMessage());
+        }
     }
 }

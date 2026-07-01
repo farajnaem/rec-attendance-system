@@ -33,7 +33,9 @@
 2. اختر مصدر الكود (Git repository)
 3. **Build Pack:** Dockerfile
 4. **Ports Exposes:** `3000` (Coolify يعيّن `PORT=3000` افتراضياً)
-5. **Health Check Path:** `/ping.php`
+5. **Health Check Path:** `/ping.php` أو `/health.php` — **لا تستخدم `/` أو `/login`**
+6. **Health Check Port:** اتركه فارغاً (يستخدم منفذ الحاوية تلقائياً) أو `3000`
+7. **Health Check Interval:** 15s | **Timeout:** 10s | **Start Period:** 120s | **Retries:** 8
 
 ---
 
@@ -136,7 +138,8 @@ SETUP_ENABLED=true
 | 500 — خطأ قاعدة البيانات | تحقق من `DATABASE_URL` أو `DB_HOST` وبيانات MySQL |
 | setup.php معطّل | عيّن `SETUP_ENABLED=true` مؤقتاً |
 | redirect خاطئ | تأكد أن `APP_URL` صحيح مع https |
-| health check فاشل | `/health` يعمل حتى بدون DB — تحقق من logs الحاوية |
+| health check فاشل | استخدم `/ping.php` أو `/health.php` — ليس `/`؛ زِد Start Period إلى 120s |
+| container unhealthy | راجع Logs: غالباً MySQL غير مربوط أو `DATABASE_URL` خاطئ |
 | 502 Bad Gateway | الحاوية لا تعمل — راجع Logs؛ فعّل `APP_DEBUG=true` وافتح `/debug/db` |
 
 ---
