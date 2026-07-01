@@ -5,10 +5,29 @@
     اختر الوصف الوظيفي — تُحدَّد الصلاحيات تلقائياً حسب الدور ويمكن تعديلها قبل الإضافة.
     <?php elseif (!empty($canEditDeptUsers)): ?>
     يمكنك مشاهدة وتعديل موظفي دائرتك فقط (بدون إضافة أو حذف).
+    <?php elseif (Auth::can('view_all_users')): ?>
+    يمكنك مشاهدة جميع الموظفين (قراءة فقط).
     <?php else: ?>
     يمكنك مشاهدة موظفي دائرتك فقط.
     <?php endif; ?>
 </p>
+
+<?php if (!empty($userOverview)): ?>
+<div class="stats" style="margin-bottom:1.25rem">
+    <div class="stat-box">
+        <div class="value"><?= (int) $userOverview['total'] ?></div>
+        <div class="label">إجمالي الموظفين</div>
+    </div>
+    <div class="stat-box">
+        <div class="value"><?= (int) $userOverview['active'] ?></div>
+        <div class="label">نشط</div>
+    </div>
+    <div class="stat-box">
+        <div class="value"><?= (int) $userOverview['inactive'] ?></div>
+        <div class="label">معطّل</div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if (!empty($canManageAllUsers)): ?>
 <div class="card" id="addUserPanel" hidden>
@@ -68,6 +87,11 @@
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="form-group" id="contractField">
+                <label>تاريخ انتهاء العقد</label>
+                <input type="date" name="contract_end_date" class="form-control">
+                <small class="text-muted">اختياري — يُجمَّد الحساب بعد مهلة التجميد من إعدادات الدوام</small>
+            </div>
         </div>
         <?php if (!empty($canEditPermissions)): ?>
         <div class="form-group" style="margin-top:1rem">
@@ -100,7 +124,8 @@
         <label for="userSearch">بحث</label>
         <input type="search" id="userSearch" class="form-control" placeholder="ابحث بالاسم أو البريد..." autocomplete="off">
     </div>
-    <table id="usersTable">
+    <div class="table-wrap">
+    <table id="usersTable" class="table">
         <thead>
             <tr>
                 <th>الاسم</th>
@@ -109,13 +134,14 @@
                 <th>الدائرة</th>
                 <th>المنطقة الزمنية</th>
                 <th>المشرف</th>
+                <th>انتهاء العقد</th>
                 <th>الحالة</th>
-                <th>إجراءات</th>
+                <th class="table-actions-col">إجراءات</th>
             </tr>
         </thead>
         <tbody>
         <?php if (empty($pagination['items'])): ?>
-            <tr><td colspan="8">لا يوجد موظفون</td></tr>
+            <tr><td colspan="9">لا يوجد موظفون</td></tr>
         <?php else: foreach ($pagination['items'] as $u): ?>
             <tr data-search="<?= e(mb_strtolower($u['name'] . ' ' . $u['email'])) ?>">
                 <td>
@@ -132,6 +158,7 @@
                 <td><?= e($u['department_name'] ?? '—') ?></td>
                 <td><?= e(TimezoneHelper::commonTimezones()[$u['timezone']] ?? $u['timezone']) ?></td>
                 <td><?= e($u['manager_name'] ?? '—') ?></td>
+                <td><?= e($u['contract_end_date'] ?? '—') ?></td>
                 <td>
                     <?php if ((int)$u['is_active'] === 1): ?>
                         <span class="badge badge-evaluated">نشط</span>
@@ -139,14 +166,16 @@
                         <span class="badge badge-pending">معطّل</span>
                     <?php endif; ?>
                 </td>
-                <td class="text-nowrap">
+                <td class="text-nowrap table-actions-col">
                     <?php
                     $canEditRow = (!empty($canEditDeptUsers) || !empty($canManageAllUsers))
                         && (int)$u['id'] !== Auth::id();
                     $canEditSelf = (int)$u['id'] === Auth::id() && (!empty($canManageAllUsers));
                     $showActions = $canEditRow || $canEditSelf
                         || (!empty($canManageAllUsers) && (int)$u['id'] !== Auth::id())
-                        || Auth::can('manage_job_description');
+                        || Auth::can('manage_job_description')
+                        || Auth::can('view_employee_documents')
+                        || Auth::can('manage_employee_documents');
                     ?>
                     <?php if ($showActions): ?>
                     <details class="row-actions-menu">
@@ -160,6 +189,9 @@
                             <?php endif; ?>
                             <?php if (Auth::can('manage_job_description') && RoleHelper::isEmployee($u['role'])): ?>
                             <a class="row-actions-item" href="<?= e(url('/manager/job-description/edit?user_id=' . (int)$u['id'])) ?>" role="menuitem">التوصيف الوظيفي</a>
+                            <?php endif; ?>
+                            <?php if (RoleHelper::isEmployee($u['role']) && (Auth::can('view_employee_documents') || Auth::can('manage_employee_documents'))): ?>
+                            <a class="row-actions-item" href="<?= e(url('/documents/employee?id=' . (int)$u['id'])) ?>" role="menuitem">حافظة المستندات</a>
                             <?php endif; ?>
                             <?php if (!empty($canEditPermissions) && !empty($canManageAllUsers) && (int)$u['id'] !== Auth::id()): ?>
                             <a class="row-actions-item" href="<?= e(url('/manager/users/permissions?id=' . (int)$u['id'])) ?>" role="menuitem">صلاحيات</a>
@@ -191,6 +223,7 @@
         <?php endforeach; endif; ?>
         </tbody>
     </table>
+    </div>
     <?php if (($pagination['pages'] ?? 1) > 1): ?>
     <nav class="pagination" style="margin-top:1rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
         <?php if ($pagination['page'] > 1): ?>
@@ -203,6 +236,14 @@
     </nav>
     <?php endif; ?>
 </div>
+
+<?php if (!empty($canBorrowEmployee)): ?>
+<?php partial('partials/borrow_employee_section', [
+    'borrowable' => $borrowable ?? [],
+    'active' => $activeBorrowings ?? [],
+    'targetDepartments' => $borrowTargetDepartments ?? [],
+]); ?>
+<?php endif; ?>
 
 <script>
 var roleDefaults = <?= json_encode($roleDefaultsMap ?? PermissionService::roleDefaultsMap(), JSON_UNESCAPED_UNICODE) ?>;
@@ -250,4 +291,12 @@ function applyRoleDefaults() {
         });
     });
 })();
+<?php if (!empty($canBorrowEmployee)): ?>
+if (window.location.hash === '#borrow-employees') {
+    var borrowSection = document.getElementById('borrow-employees');
+    if (borrowSection) {
+        borrowSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+<?php endif; ?>
 </script>

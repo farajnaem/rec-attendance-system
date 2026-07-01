@@ -23,6 +23,7 @@ class NarrativeReportService
         string $positives,
         string $negatives,
         string $developmentNotes,
+        string $difficulties,
         bool $submit = false
     ): void {
         if (!self::canEdit($year, $month)) {
@@ -37,21 +38,22 @@ class NarrativeReportService
             $pdo->prepare(
                 'UPDATE monthly_narrative_reports
                  SET work_summary = ?, positives = ?, negatives = ?, development_notes = ?,
-                     submitted_at = ?, updated_at = CURRENT_TIMESTAMP
+                     difficulties = ?, submitted_at = ?, updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?'
             )->execute([
                 self::clean($workSummary),
                 self::clean($positives),
                 self::clean($negatives),
                 self::clean($developmentNotes),
+                self::clean($difficulties),
                 $submittedAt,
                 $existing['id'],
             ]);
         } else {
             $pdo->prepare(
                 'INSERT INTO monthly_narrative_reports
-                 (user_id, year, month, work_summary, positives, negatives, development_notes, submitted_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                 (user_id, year, month, work_summary, positives, negatives, development_notes, difficulties, submitted_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )->execute([
                 $userId,
                 $year,
@@ -60,9 +62,47 @@ class NarrativeReportService
                 self::clean($positives),
                 self::clean($negatives),
                 self::clean($developmentNotes),
+                self::clean($difficulties),
                 $submittedAt,
             ]);
         }
+    }
+
+    public static function canView(int $actorId, string $actorRole, int $subjectUserId): bool
+    {
+        if ($actorId === $subjectUserId) {
+            return PermissionService::can($actorId, 'monthly_self_report');
+        }
+        if (!PermissionService::can($actorId, 'view_narrative_reports')) {
+            return false;
+        }
+
+        return ScopeService::canViewUser($actorId, $actorRole, $subjectUserId);
+    }
+
+    public static function listSubmittedForReviewer(int $actorId, string $actorRole, int $year, int $month): array
+    {
+        if (!PermissionService::can($actorId, 'view_narrative_reports')) {
+            return [];
+        }
+        $staff = ScopeService::visibleStaff($actorId, $actorRole);
+        if ($staff === []) {
+            return [];
+        }
+        $ids = array_column($staff, 'id');
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $pdo = Database::getConnection();
+        $params = array_merge($ids, [$year, $month]);
+        $stmt = $pdo->prepare(
+            "SELECT n.*, u.name AS user_name
+             FROM monthly_narrative_reports n
+             JOIN users u ON u.id = n.user_id
+             WHERE n.user_id IN ($ph) AND n.year = ? AND n.month = ? AND n.submitted_at IS NOT NULL
+             ORDER BY u.name"
+        );
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
     }
 
     public static function submissionDays(): int

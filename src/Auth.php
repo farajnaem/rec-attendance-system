@@ -50,6 +50,14 @@ class Auth
             return false;
         }
 
+        ContractService::enforceForUser((int) $user['id']);
+        $stmt->execute([(int) $_SESSION['user_id']]);
+        $user = $stmt->fetch();
+        if (!$user || !(int) $user['is_active']) {
+            self::logout();
+            return false;
+        }
+
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['user_email'] = $user['email'];
         $_SESSION['user_role'] = RoleHelper::normalizeRole((string) $user['role']);

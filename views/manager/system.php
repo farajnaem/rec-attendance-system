@@ -15,12 +15,6 @@
         <p class="text-muted">مواقع العمل وإحداثيات GPS للتحقق من الحضور.</p>
     </a>
     <?php endif; ?>
-    <?php if (Auth::can('borrow_employee') || Auth::can('transfer_employee')): ?>
-    <a href="<?= e(url('/manager/borrow-employee')) ?>" class="card link-card">
-        <h3>الاستعارة المؤقتة</h3>
-        <p class="text-muted">استعارة موظف من دائرة أخرى لفترة محددة.</p>
-    </a>
-    <?php endif; ?>
     <?php if (RoleHelper::isSystemAdmin(Auth::role())): ?>
     <a href="<?= e(url('/manager/audit')) ?>" class="card link-card">
         <h3>سجل التدقيق</h3>

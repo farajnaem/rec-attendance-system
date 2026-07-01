@@ -133,6 +133,9 @@ class CrossDepartmentService
         if (in_array($role, ['system_admin', 'director'], true)) {
             return;
         }
+        if ($role === 'admin_assistant' && PermissionService::can($actorId, 'borrow_employee')) {
+            return;
+        }
         if ($role === 'program_supervisor' && PermissionService::can($actorId, 'borrow_employee')) {
             if ($targetDepartmentId !== null) {
                 $deptIds = ScopeService::supervisedDepartmentIds($actorId);
@@ -177,7 +180,8 @@ class CrossDepartmentService
     {
         $pdo = Database::getConnection();
         $role = RoleHelper::normalizeRole($actorRole);
-        if (in_array($role, ['system_admin', 'director'], true)) {
+        if (in_array($role, ['system_admin', 'director', 'admin_assistant'], true)
+            && PermissionService::can($actorId, 'borrow_employee')) {
             $stmt = $pdo->query(
                 'SELECT c.*, u.name AS employee_name, d.name AS target_department_name, h.name AS home_department_name
                  FROM cross_department_assignments c

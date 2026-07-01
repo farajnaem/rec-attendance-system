@@ -54,8 +54,39 @@ function dispatchExtraRoutes(string $route, string $method): bool
             $status = null;
         }
         $leaves = LeaveService::listForManager(Auth::id(), Auth::role(), $status);
-        view('manager/leaves', ['title' => 'إدارة الإجازات', 'leaves' => $leaves, 'status' => $status]);
+        $pendingBreaks = WorkBreakService::pendingForReviewer(Auth::id(), Auth::role());
+        view('manager/leaves', ['title' => 'إدارة الإجازات', 'leaves' => $leaves, 'status' => $status, 'pendingBreaks' => $pendingBreaks]);
         return true;
+    }
+
+    if ($route === '/manager/work-break/approve' && $method === 'POST') {
+        Auth::requirePermission('approve_work_breaks');
+        if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+            flash('error', 'انتهت صلاحية النموذج.');
+            redirect('/manager/leaves');
+        }
+        try {
+            WorkBreakService::review((int) ($_POST['break_id'] ?? 0), Auth::id(), Auth::role(), true);
+            flash('success', 'تم اعتماد المغادرة.');
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/manager/leaves');
+    }
+
+    if ($route === '/manager/work-break/reject' && $method === 'POST') {
+        Auth::requirePermission('approve_work_breaks');
+        if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+            flash('error', 'انتهت صلاحية النموذج.');
+            redirect('/manager/leaves');
+        }
+        try {
+            WorkBreakService::review((int) ($_POST['break_id'] ?? 0), Auth::id(), Auth::role(), false);
+            flash('success', 'تم رفض طلب المغادرة.');
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/manager/leaves');
     }
 
     if ($route === '/manager/leaves/approve' && $method === 'POST') {

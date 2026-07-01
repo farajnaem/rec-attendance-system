@@ -49,6 +49,9 @@
         });
         document.querySelectorAll('details.rd-user-menu[open], details.row-actions-menu[open]').forEach(function (m) {
             m.removeAttribute('open');
+            if (m.classList.contains('row-actions-menu')) {
+                resetRowActionsPanel(m);
+            }
         });
     });
 
@@ -64,9 +67,71 @@
         document.querySelectorAll('details.row-actions-menu[open]').forEach(function (openMenu) {
             if (openMenu !== rowMenu) {
                 openMenu.removeAttribute('open');
+                resetRowActionsPanel(openMenu);
             }
         });
     });
+
+    function resetRowActionsPanel(menu) {
+        var panel = menu && menu.querySelector('.row-actions-panel');
+        if (!panel) return;
+        panel.style.position = '';
+        panel.style.top = '';
+        panel.style.left = '';
+        panel.style.right = '';
+        panel.style.minWidth = '';
+        panel.style.zIndex = '';
+    }
+
+    function positionRowActionsPanel(menu) {
+        var trigger = menu.querySelector('.row-actions-trigger');
+        var panel = menu.querySelector('.row-actions-panel');
+        if (!trigger || !panel) return;
+
+        panel.style.position = 'fixed';
+        panel.style.zIndex = '1200';
+        panel.style.minWidth = '11rem';
+
+        var rect = trigger.getBoundingClientRect();
+        var panelWidth = panel.offsetWidth || 176;
+        var panelHeight = panel.offsetHeight || 160;
+        var gap = 6;
+        var margin = 8;
+        var top = rect.bottom + gap;
+        var left = rect.right - panelWidth;
+
+        if (left < margin) left = margin;
+        if (left + panelWidth > window.innerWidth - margin) {
+            left = window.innerWidth - panelWidth - margin;
+        }
+        if (top + panelHeight > window.innerHeight - margin) {
+            top = rect.top - panelHeight - gap;
+        }
+
+        panel.style.top = Math.max(margin, top) + 'px';
+        panel.style.left = Math.max(margin, left) + 'px';
+        panel.style.right = 'auto';
+    }
+
+    document.querySelectorAll('details.row-actions-menu').forEach(function (menu) {
+        menu.addEventListener('toggle', function () {
+            if (!menu.open) {
+                resetRowActionsPanel(menu);
+                return;
+            }
+            requestAnimationFrame(function () {
+                positionRowActionsPanel(menu);
+            });
+        });
+    });
+
+    window.addEventListener('resize', function () {
+        document.querySelectorAll('details.row-actions-menu[open]').forEach(positionRowActionsPanel);
+    });
+
+    window.addEventListener('scroll', function () {
+        document.querySelectorAll('details.row-actions-menu[open]').forEach(positionRowActionsPanel);
+    }, true);
 
     document.querySelectorAll('[data-password-toggle]').forEach(function (btn) {
         btn.addEventListener('click', function () {

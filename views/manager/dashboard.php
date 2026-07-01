@@ -8,7 +8,7 @@
 <div class="stats">
     <div class="stat-box">
         <div class="value"><?= (int) ($stats['total_employees'] ?? count($team)) ?></div>
-        <div class="label">عدد الموظفين في نطاقك</div>
+        <div class="label"><?= Auth::can('view_all_users') ? 'جميع الموظفين' : 'عدد الموظفين في نطاقك' ?></div>
     </div>
     <div class="stat-box">
         <div class="value"><?= (int) ($stats['present_today'] ?? 0) ?></div>
@@ -61,22 +61,30 @@
     <a href="<?= e(url('/manager/users')) ?>" class="card link-card">
         <h3>إدارة الموظفين</h3>
         <p class="text-muted">
-            <?= PermissionService::hasFullUserManagement(Auth::id())
-                ? 'إضافة موظفين وتعديل الصلاحيات'
-                : 'مشاهدة وتعديل موظفي الدائرة' ?>
+            <?php if (PermissionService::hasFullUserManagement(Auth::id())): ?>
+            إضافة موظفين وتعديل الصلاحيات
+            <?php elseif (Auth::can('view_all_users')): ?>
+            مشاهدة جميع الموظفين
+            <?php else: ?>
+            مشاهدة وتعديل موظفي الدائرة
+            <?php endif; ?>
         </p>
     </a>
     <?php endif; ?>
-    <?php if (Auth::can('manage_departments')): ?>
+    <?php if (PermissionService::canViewDepartments(Auth::id())): ?>
     <a href="<?= e(url('/manager/departments')) ?>" class="card link-card">
-        <h3>الدوائر</h3>
-        <p class="text-muted">إدارة الدوائر ومشرفيها</p>
+        <h3><?= PermissionService::canManageDepartments(Auth::id()) ? 'الدوائر' : 'الاطلاع على الدوائر' ?></h3>
+        <p class="text-muted">
+            <?= PermissionService::canManageDepartments(Auth::id())
+                ? 'إدارة الدوائر ومشرفيها'
+                : 'عرض الدوائر المسجّلة ومشرفيها' ?>
+        </p>
     </a>
     <?php endif; ?>
-    <?php if (RoleHelper::isOrgAdmin(Auth::role()) || Auth::can('manage_work_schedule') || Auth::can('manage_locations') || Auth::can('borrow_employee') || RoleHelper::isSystemAdmin(Auth::role())): ?>
+    <?php if (RoleHelper::isOrgAdmin(Auth::role()) || Auth::can('manage_work_schedule') || Auth::can('manage_locations') || RoleHelper::isSystemAdmin(Auth::role())): ?>
     <a href="<?= e(url('/manager/system')) ?>" class="card link-card">
         <h3>إعدادات النظام</h3>
-        <p class="text-muted">ساعات الدوام، المواقع، الاستعارة، التدقيق، والنسخ الاحتياطي</p>
+        <p class="text-muted">ساعات الدوام، المواقع، التدقيق، والنسخ الاحتياطي</p>
     </a>
     <?php endif; ?>
     <?php if (Auth::can('manage_job_description')): ?>

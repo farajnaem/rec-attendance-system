@@ -12,6 +12,9 @@ class ScopeService
             && in_array($role, ['system_admin', 'director'], true)) {
             return UserService::listForAdmin();
         }
+        if ($role === 'admin_assistant' && PermissionService::can($actorId, 'view_all_users')) {
+            return UserService::listForAdmin();
+        }
         if ($role === 'program_supervisor'
             && (PermissionService::can($actorId, 'view_department_users')
                 || PermissionService::can($actorId, 'edit_department_users'))) {
@@ -34,6 +37,13 @@ class ScopeService
                  FROM users u WHERE u.is_active = 1 ORDER BY u.name'
             )->fetchAll();
         }
+        if ($role === 'admin_assistant' && PermissionService::can($actorId, 'view_all_users')) {
+            $pdo = Database::getConnection();
+            return $pdo->query(
+                'SELECT u.id, u.name, u.email, u.timezone, u.role
+                 FROM users u WHERE u.is_active = 1 AND u.role = "employee" ORDER BY u.name'
+            )->fetchAll();
+        }
         if ($role === 'program_supervisor') {
             return self::staffForSupervisor($actorId);
         }
@@ -45,10 +55,13 @@ class ScopeService
         if ($actorId === $targetUserId) {
             return true;
         }
+        $role = RoleHelper::normalizeRole($actorRole);
+        if ($role === 'admin_assistant' && PermissionService::can($actorId, 'view_all_users')) {
+            return UserService::getById($targetUserId) !== null;
+        }
         if (self::canManageDepartmentUser($actorId, $actorRole, $targetUserId)) {
             return true;
         }
-        $role = RoleHelper::normalizeRole($actorRole);
         if (PermissionService::hasFullUserManagement($actorId)
             && in_array($role, ['system_admin', 'director'], true)) {
             return UserService::getById($targetUserId) !== null;

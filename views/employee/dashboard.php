@@ -100,6 +100,55 @@
     <?php else: ?>
     <div class="alert alert-success">اكتمل تسجيل حضور وانصراف اليوم. شكراً لالتزامك!</div>
     <?php endif; ?>
+
+    <?php if (!empty($status['check_in']) && (Auth::can('request_work_break') || Auth::can('sign_attendance'))): ?>
+    <div id="work-breaks" style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1.25rem">
+        <h3>المغادرة أثناء العمل</h3>
+        <p class="text-muted">سجّل وقت الخروج والعودة ومن أعطاك الإذن — يتطلب اعتماد المشرف أو المدير.</p>
+        <form method="post" action="<?= e(url('/employee/work-break/request')) ?>" class="grid-2" style="margin-bottom:1rem">
+            <?= Csrf::field() ?>
+            <input type="hidden" name="work_date" value="<?= e($status['local_date']) ?>">
+            <div class="form-group">
+                <label>وقت الخروج *</label>
+                <input type="time" name="exit_time" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>وقت العودة *</label>
+                <input type="time" name="return_time" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>معطي الإذن *</label>
+                <select name="authorized_by" class="form-control" required>
+                    <option value="">— اختر —</option>
+                    <?php foreach ($breakAuthorizers as $m): ?>
+                    <option value="<?= (int)$m['id'] ?>"><?= e($m['name']) ?> (<?= e(RoleHelper::label($m['role'])) ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>ملاحظات</label>
+                <input type="text" name="notes" class="form-control" placeholder="اختياري">
+            </div>
+            <div style="grid-column:1/-1"><button type="submit" class="btn btn-outline">تسجيل مغادرة</button></div>
+        </form>
+        <?php if (!empty($workBreaks)): ?>
+        <table>
+            <thead><tr><th>التاريخ</th><th>خروج</th><th>عودة</th><th>معطي الإذن</th><th>الحالة</th></tr></thead>
+            <tbody>
+            <?php foreach ($workBreaks as $wb): ?>
+            <tr>
+                <td><?= e($wb['work_date']) ?></td>
+                <td><?= e($wb['exit_time']) ?></td>
+                <td><?= e($wb['return_time']) ?></td>
+                <td><?= e($wb['authorized_by_name']) ?></td>
+                <td><?= e(WorkBreakService::statusLabel($wb['status'])) ?></td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 </div>
 <?php else: ?>
 <div class="card">

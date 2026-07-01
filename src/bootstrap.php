@@ -41,6 +41,8 @@ function rec_load_core(): void
     require_once $root . '/src/NotificationService.php';
     require_once $root . '/src/NarrativeReportService.php';
     require_once $root . '/src/DocumentService.php';
+    require_once $root . '/src/ContractService.php';
+    require_once $root . '/src/WorkBreakService.php';
 }
 
 function rec_run_migrations_if_enabled(): void

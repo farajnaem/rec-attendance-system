@@ -107,9 +107,14 @@ body.page-login {
     padding: 0;
     margin-bottom: 1.25rem;
     box-shadow: var(--shadow-xs);
-    overflow: hidden;
     transition: box-shadow var(--transition), border-color var(--transition-fast), transform var(--transition-fast);
     animation: fadeUp 0.45s ease both;
+}
+
+.card:has(.table-wrap),
+.card:has(.row-actions-menu),
+.card:has(table) {
+    overflow: visible;
 }
 
 .card:hover {
@@ -440,10 +445,11 @@ body.page-login {
 
 .row-actions-panel {
     position: absolute;
-    inset-inline-start: 0;
+    inset-inline-end: 0;
+    inset-inline-start: auto;
     top: calc(100% + 0.35rem);
-    z-index: 30;
-    min-width: 9.5rem;
+    z-index: 50;
+    min-width: 11rem;
     padding: 0.35rem;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -564,7 +570,51 @@ textarea.form-control {
 
 .table-wrap {
     overflow-x: auto;
+    overflow-y: visible;
     -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap .table-actions-col,
+.card > table .table-actions-col {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    min-width: 7.5rem;
+    background: var(--surface);
+    box-shadow: 4px 0 10px -6px rgba(15, 23, 42, 0.12);
+}
+
+.table-wrap .table-actions-col::before,
+.card > table .table-actions-col::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 100%;
+    width: 0.75rem;
+    pointer-events: none;
+    background: linear-gradient(to left, rgba(15, 23, 42, 0.06), transparent);
+}
+
+.card > table thead .table-actions-col,
+.table-wrap .table thead .table-actions-col {
+    background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
+}
+
+.card > .table-wrap {
+    margin-inline: -0.05rem;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.card > .table-wrap:first-child {
+    border-top: none;
+}
+
+.card > .table-wrap + * {
+    padding-top: 0;
+}
+
+#usersTable {
+    min-width: 64rem;
 }
 
 .table-wrap:not(:first-child) {

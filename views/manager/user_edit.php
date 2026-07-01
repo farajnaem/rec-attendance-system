@@ -85,6 +85,14 @@
                 <input type="text" class="form-control" disabled
                        value="<?= (int)$user['is_active'] === 1 ? 'نشط' : 'معطّل' ?>">
             </div>
+            <?php if (!empty($canManageAllUsers) && RoleHelper::isEmployee($user['role'])): ?>
+            <div class="form-group">
+                <label>تاريخ انتهاء العقد</label>
+                <input type="date" name="contract_end_date" class="form-control"
+                       value="<?= e($user['contract_end_date'] ?? '') ?>">
+                <small class="text-muted">يُجمَّد الحساب تلقائياً بعد مهلة التجميد من إعدادات الدوام</small>
+            </div>
+            <?php endif; ?>
         </div>
         <div style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem">
             <button type="submit" class="btn">حفظ التعديلات</button>

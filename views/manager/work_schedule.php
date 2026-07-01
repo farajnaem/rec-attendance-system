@@ -57,7 +57,14 @@ $canDeadline = Auth::can('manage_report_deadline') || RoleHelper::isSystemAdmin(
                 <label>مهلة تقديم التقرير السردي (أيام بعد نهاية الشهر)</label>
                 <input type="number" name="report_submission_days" class="form-control" min="1" max="31"
                        value="<?= (int)($schedule['report_submission_days'] ?? 5) ?>">
-                <small class="text-muted">عدد الأيام التي يستطيع فيها الموظف رفع تقريره السردي بعد انتهاء الشهر</small>
+            </div>
+            <?php endif; ?>
+            <?php if ($canSchedule): ?>
+            <div class="form-group">
+                <label>أيام تجميد الحساب بعد انتهاء العقد</label>
+                <input type="number" name="contract_freeze_grace_days" class="form-control" min="0" max="365"
+                       value="<?= (int)($schedule['contract_freeze_grace_days'] ?? 30) ?>">
+                <small class="text-muted">بعد هذا العدد من الأيام من تاريخ انتهاء العقد يُعطّل حساب الموظف تلقائياً</small>
             </div>
             <?php endif; ?>
         </div>

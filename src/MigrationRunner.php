@@ -15,6 +15,10 @@ class MigrationRunner
     private const PHASE_9 = 'phase_9_permissions_matrix';
     private const PHASE_10 = 'phase_10_manage_permissions';
     private const PHASE_11 = 'phase_11_supervisor_dept_users';
+    private const PHASE_12 = 'phase_12_admin_assistant_view_all';
+    private const PHASE_13 = 'phase_13_borrow_users_tab';
+    private const PHASE_14 = 'phase_14_supervisor_view_departments';
+    private const PHASE_15 = 'phase_15_contracts_docs_breaks';
 
     public static function ensureLatest(): void
     {
@@ -64,6 +68,22 @@ class MigrationRunner
         if (!self::isApplied($pdo, self::PHASE_11)) {
             self::runPhase11($pdo);
             self::markApplied($pdo, self::PHASE_11);
+        }
+        if (!self::isApplied($pdo, self::PHASE_12)) {
+            self::runPhase12($pdo);
+            self::markApplied($pdo, self::PHASE_12);
+        }
+        if (!self::isApplied($pdo, self::PHASE_13)) {
+            self::runPhase13($pdo);
+            self::markApplied($pdo, self::PHASE_13);
+        }
+        if (!self::isApplied($pdo, self::PHASE_14)) {
+            self::runPhase14($pdo);
+            self::markApplied($pdo, self::PHASE_14);
+        }
+        if (!self::isApplied($pdo, self::PHASE_15)) {
+            self::runPhase15($pdo);
+            self::markApplied($pdo, self::PHASE_15);
         }
     }
 
@@ -754,5 +774,156 @@ class MigrationRunner
         foreach ($users as $user) {
             PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
         }
+    }
+
+    /** مشاهدة جميع الموظفين + تحميل المستندات للمساعد الإداري */
+    private static function runPhase12(PDO $pdo): void
+    {
+        $assistants = $pdo->query(
+            'SELECT id FROM users WHERE role = "admin_assistant"'
+        )->fetchAll();
+        foreach ($assistants as $row) {
+            $uid = (int) $row['id'];
+            foreach (['view_all_users', 'view_documents', 'manage_documents'] as $code) {
+                $exists = $pdo->prepare(
+                    'SELECT granted FROM user_permissions WHERE user_id = ? AND permission_code = ?'
+                );
+                $exists->execute([$uid, $code]);
+                if (!$exists->fetch()) {
+                    $pdo->prepare(
+                        'INSERT INTO user_permissions (user_id, permission_code, granted) VALUES (?, ?, 1)'
+                    )->execute([$uid, $code]);
+                }
+            }
+        }
+
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
+    }
+
+    /** الاستعارة في تبويب الموظفين + صلاحيات المساعد الإداري */
+    private static function runPhase13(PDO $pdo): void
+    {
+        $roles = ['director', 'program_supervisor', 'admin_assistant', 'manager'];
+        foreach ($roles as $role) {
+            $users = $pdo->prepare('SELECT id FROM users WHERE role = ?');
+            $users->execute([$role]);
+            foreach ($users->fetchAll() as $row) {
+                $uid = (int) $row['id'];
+                foreach (['borrow_employee', 'view_all_users', 'view_documents'] as $code) {
+                    if ($role === 'director' && $code === 'view_all_users') {
+                        continue;
+                    }
+                    if (in_array($role, ['program_supervisor', 'manager'], true) && $code === 'view_all_users') {
+                        continue;
+                    }
+                    $exists = $pdo->prepare(
+                        'SELECT granted FROM user_permissions WHERE user_id = ? AND permission_code = ?'
+                    );
+                    $exists->execute([$uid, $code]);
+                    if (!$exists->fetch()) {
+                        $pdo->prepare(
+                            'INSERT INTO user_permissions (user_id, permission_code, granted) VALUES (?, ?, 1)'
+                        )->execute([$uid, $code]);
+                    }
+                }
+            }
+        }
+
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
+    }
+
+    /** مشرف الدائرة: اطلاع فقط على الدوائر بدون إدارة */
+    private static function runPhase14(PDO $pdo): void
+    {
+        $supervisors = $pdo->query(
+            'SELECT id FROM users WHERE role IN ("program_supervisor", "manager")'
+        )->fetchAll();
+        foreach ($supervisors as $row) {
+            $uid = (int) $row['id'];
+            $pdo->prepare('DELETE FROM user_permissions WHERE user_id = ? AND permission_code = ?')
+                ->execute([$uid, 'manage_departments']);
+        }
+
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
+    }
+
+    private static function runPhase15(PDO $pdo): void
+    {
+        $isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+
+        self::addColumnIfMissing($pdo, 'users', 'contract_end_date', $isSqlite ? 'TEXT NULL' : 'DATE NULL');
+        self::addColumnIfMissing(
+            $pdo,
+            'work_schedule',
+            'contract_freeze_grace_days',
+            $isSqlite ? 'INTEGER NOT NULL DEFAULT 30' : 'INT UNSIGNED NOT NULL DEFAULT 30'
+        );
+        self::addColumnIfMissing($pdo, 'monthly_narrative_reports', 'difficulties', 'TEXT NULL');
+        self::addColumnIfMissing(
+            $pdo,
+            'documents',
+            'owner_user_id',
+            $isSqlite ? 'INTEGER NULL' : 'INT UNSIGNED NULL'
+        );
+        self::addColumnIfMissing(
+            $pdo,
+            'documents',
+            'category',
+            $isSqlite ? 'TEXT NOT NULL DEFAULT "other"' : "VARCHAR(32) NOT NULL DEFAULT 'other'"
+        );
+
+        if ($isSqlite) {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS work_day_breaks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                work_date TEXT NOT NULL,
+                exit_time TEXT NOT NULL,
+                return_time TEXT NOT NULL,
+                authorized_by INTEGER NOT NULL,
+                notes TEXT NULL,
+                status TEXT NOT NULL DEFAULT "pending",
+                reviewed_by INTEGER NULL,
+                reviewed_at TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (authorized_by) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+            )');
+        } else {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS work_day_breaks (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                work_date DATE NOT NULL,
+                exit_time TIME NOT NULL,
+                return_time TIME NOT NULL,
+                authorized_by INT UNSIGNED NOT NULL,
+                notes TEXT NULL,
+                status ENUM("pending","approved","rejected") NOT NULL DEFAULT "pending",
+                reviewed_by INT UNSIGNED NULL,
+                reviewed_at DATETIME NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_wdb_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                CONSTRAINT fk_wdb_auth FOREIGN KEY (authorized_by) REFERENCES users(id) ON DELETE CASCADE,
+                CONSTRAINT fk_wdb_rev FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+        }
+
+        $pdo->exec('UPDATE documents SET owner_user_id = uploaded_by WHERE owner_user_id IS NULL');
+
+        $users = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($users as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
+        }
+
+        ContractService::enforceAllExpired();
     }
 }

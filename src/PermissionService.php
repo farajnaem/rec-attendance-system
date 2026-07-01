@@ -66,8 +66,28 @@ class PermissionService
             'defaults' => ['admin_assistant'],
         ],
         'view_documents' => [
-            'label' => 'تحميل المستندات',
+            'label' => 'تحميل المستندات (عام)',
             'defaults' => ['admin_assistant'],
+        ],
+        'view_employee_documents' => [
+            'label' => 'الاطلاع على حافظة مستندات الموظف',
+            'defaults' => ['admin_assistant', 'program_supervisor', 'director'],
+        ],
+        'manage_employee_documents' => [
+            'label' => 'رفع مستندات في حافظة الموظف',
+            'defaults' => ['admin_assistant', 'director'],
+        ],
+        'view_narrative_reports' => [
+            'label' => 'مشاهدة التقارير السردية للموظفين',
+            'defaults' => ['program_supervisor', 'director'],
+        ],
+        'request_work_break' => [
+            'label' => 'تسجيل مغادرة أثناء العمل',
+            'defaults' => ['employee'],
+        ],
+        'approve_work_breaks' => [
+            'label' => 'اعتماد مغادرات أثناء العمل',
+            'defaults' => ['program_supervisor', 'director'],
         ],
         'manage_work_schedule' => [
             'label' => 'تحديد ساعات الدوام',
@@ -82,8 +102,12 @@ class PermissionService
             'defaults' => ['director', 'program_supervisor'],
         ],
         'borrow_employee' => [
-            'label' => 'الاستعارة المؤقتة من دائرة أخرى',
-            'defaults' => ['director', 'program_supervisor'],
+            'label' => 'الاستعارة المؤقتة للموظفين',
+            'defaults' => ['director', 'program_supervisor', 'admin_assistant'],
+        ],
+        'view_all_users' => [
+            'label' => 'مشاهدة جميع الموظفين (العدد والحالات)',
+            'defaults' => ['admin_assistant'],
         ],
         'view_department_users' => [
             'label' => 'مشاهدة موظفي الدائرة',
@@ -106,8 +130,12 @@ class PermissionService
             'defaults' => ['admin_assistant'],
         ],
         'manage_departments' => [
-            'label' => 'إدارة الدوائر ومشرفيها',
+            'label' => 'إدارة الدوائر (إضافة وتعديل)',
             'defaults' => ['director'],
+        ],
+        'view_departments' => [
+            'label' => 'الاطلاع على الدوائر (قراءة فقط)',
+            'defaults' => ['program_supervisor'],
         ],
         'manage_system' => [
             'label' => 'إعدادات النظام (تدقيق، نسخ احتياطي)',
@@ -157,13 +185,20 @@ class PermissionService
             'print_archive_reports' => 'management',
             'manage_documents' => 'management',
             'view_documents' => 'management',
+            'view_employee_documents' => 'management',
+            'manage_employee_documents' => 'management',
+            'view_narrative_reports' => 'management',
+            'request_work_break' => 'employee',
+            'approve_work_breaks' => 'management',
             'transfer_employee' => 'management',
             'borrow_employee' => 'management',
+            'view_all_users' => 'management',
             'view_department_users' => 'management',
             'edit_department_users' => 'management',
             'manage_users' => 'management',
             'manage_permissions' => 'management',
             'manage_departments' => 'management',
+            'view_departments' => 'management',
             'manage_work_schedule' => 'system',
             'manage_report_deadline' => 'system',
             'manage_locations' => 'system',
@@ -347,7 +382,15 @@ class PermissionService
 
     public static function canAccessUsersList(int $userId): bool
     {
-        return self::can($userId, 'manage_users') || self::can($userId, 'view_department_users');
+        return self::can($userId, 'manage_users')
+            || self::can($userId, 'view_all_users')
+            || self::can($userId, 'view_department_users')
+            || self::can($userId, 'borrow_employee');
+    }
+
+    public static function canViewAllUsers(int $userId): bool
+    {
+        return self::can($userId, 'manage_users') || self::can($userId, 'view_all_users');
     }
 
     public static function canEditUserRecord(int $userId): bool
@@ -358,5 +401,15 @@ class PermissionService
     public static function hasFullUserManagement(int $userId): bool
     {
         return self::can($userId, 'manage_users');
+    }
+
+    public static function canViewDepartments(int $userId): bool
+    {
+        return self::can($userId, 'manage_departments') || self::can($userId, 'view_departments');
+    }
+
+    public static function canManageDepartments(int $userId): bool
+    {
+        return self::can($userId, 'manage_departments');
     }
 }

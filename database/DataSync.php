@@ -25,6 +25,7 @@ final class DataSync
         'monthly_narrative_reports',
         'task_replies',
         'documents',
+        'work_day_breaks',
         'job_description_profiles',
         'job_description_duties',
         'schema_migrations',

@@ -11,7 +11,6 @@ $navActive = static function (string ...$paths) use ($route): string {
 $canSystem = Auth::can('manage_work_schedule')
     || Auth::can('manage_report_deadline')
     || Auth::can('manage_locations')
-    || Auth::can('borrow_employee')
     || Auth::can('transfer_employee')
     || Auth::can('manage_system')
     || RoleHelper::isSystemAdmin(Auth::role());
@@ -42,21 +41,33 @@ $canSystem = Auth::can('manage_work_schedule')
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></span>
         <span>التوصيف الوظيفي</span>
     </a>
-    <?php if (Auth::can('manage_documents') || Auth::can('view_documents')): ?>
+    <?php if (RoleHelper::isEmployee(Auth::role())): ?>
     <a class="rd-nav-link<?= $navActive('/documents') ?>" href="<?= e(url('/documents')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
-        <span>المستندات</span>
+        <span>مستنداتي</span>
     </a>
     <?php endif; ?>
 
     <?php if (!RoleHelper::isEmployee(Auth::role())): ?>
+    <?php if (Auth::can('view_employee_documents') || Auth::can('manage_employee_documents') || Auth::can('view_documents') || Auth::can('manage_documents')): ?>
+    <a class="rd-nav-link<?= $navActive('/documents') ?>" href="<?= e(url('/documents')) ?>">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+        <span>حافظات المستندات</span>
+    </a>
+    <?php endif; ?>
+    <?php if (Auth::can('view_narrative_reports')): ?>
+    <a class="rd-nav-link<?= $navActive('/manager/narrative-reports') ?>" href="<?= e(url('/manager/narrative-reports')) ?>">
+        <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
+        <span>التقارير السردية</span>
+    </a>
+    <?php endif; ?>
     <div class="rd-nav-section">الإدارة</div>
     <a class="rd-nav-link<?= $navActive('/manager/dashboard') ?>" href="<?= e(url('/manager/dashboard')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 6-10"/></svg></span>
         <span>لوحة التحكم</span>
     </a>
     <?php if (PermissionService::canAccessUsersList(Auth::id())): ?>
-    <a class="rd-nav-link<?= $navActive('/manager/users') ?>" href="<?= e(url('/manager/users')) ?>">
+    <a class="rd-nav-link<?= $navActive('/manager/users', '/manager/borrow-employee') ?>" href="<?= e(url('/manager/users')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span>الموظفون</span>
     </a>
@@ -67,10 +78,10 @@ $canSystem = Auth::can('manage_work_schedule')
         <span>مجموعة الصلاحيات</span>
     </a>
     <?php endif; ?>
-    <?php if (Auth::can('manage_departments')): ?>
+    <?php if (PermissionService::canViewDepartments(Auth::id())): ?>
     <a class="rd-nav-link<?= $navActive('/manager/departments') ?>" href="<?= e(url('/manager/departments')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>
-        <span>الدوائر</span>
+        <span><?= PermissionService::canManageDepartments(Auth::id()) ? 'الدوائر' : 'الاطلاع على الدوائر' ?></span>
     </a>
     <?php endif; ?>
     <?php if (Auth::can('manage_job_description')): ?>
@@ -103,7 +114,7 @@ $canSystem = Auth::can('manage_work_schedule')
 
     <?php if ($canSystem): ?>
     <div class="rd-nav-section">إدارة النظام</div>
-    <a class="rd-nav-link<?= $navActive('/manager/system', '/manager/work-schedule', '/manager/locations', '/manager/borrow-employee', '/manager/audit', '/manager/database') ?>" href="<?= e(url('/manager/system')) ?>">
+    <a class="rd-nav-link<?= $navActive('/manager/system', '/manager/work-schedule', '/manager/locations', '/manager/audit', '/manager/database') ?>" href="<?= e(url('/manager/system')) ?>">
         <span class="rd-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
         <span>إعدادات النظام</span>
     </a>

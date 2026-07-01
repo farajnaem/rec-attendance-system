@@ -63,6 +63,12 @@ $months = [1=>'يناير',2=>'فبراير',3=>'مارس',4=>'أبريل',5=>'�
                     <textarea name="development_notes" class="form-control" rows="3"
                               <?= $canEditNarrative ? '' : 'readonly' ?>><?= e($narrative['development_notes'] ?? '') ?></textarea>
                 </div>
+                <div class="form-group">
+                    <label>الصعوبات التي مرّ بها خلال الشهر</label>
+                    <textarea name="difficulties" class="form-control" rows="3"
+                              placeholder="صعوبات تقنية، إدارية، ميدانية..."
+                              <?= $canEditNarrative ? '' : 'readonly' ?>><?= e($narrative['difficulties'] ?? '') ?></textarea>
+                </div>
                 <?php if ($canEditNarrative): ?>
                 <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
                     <button type="submit" class="btn btn-outline">حفظ مسودة</button>
@@ -107,6 +113,9 @@ $months = [1=>'يناير',2=>'فبراير',3=>'مارس',4=>'أبريل',5=>'�
             <?php endif; ?>
             <?php if (!empty($narrative['development_notes'])): ?>
             <p><strong>ملاحظات التطوير:</strong><br><?= nl2br(e($narrative['development_notes'])) ?></p>
+            <?php endif; ?>
+            <?php if (!empty($narrative['difficulties'])): ?>
+            <p><strong>الصعوبات:</strong><br><?= nl2br(e($narrative['difficulties'])) ?></p>
             <?php endif; ?>
         </div>
         <?php endif; ?>

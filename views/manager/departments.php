@@ -1,7 +1,17 @@
-<?php $title = 'إدارة الدوائر'; ?>
-<h1>إدارة الدوائر</h1>
-<p class="text-muted">أضف دوائر المؤسسة وعيّن مشرف برنامج لكل دائرة. متاح لمدير النظام والمدير.</p>
+<?php
+$title = !empty($canManageDepartments) ? 'إدارة الدوائر' : 'الدوائر';
+$canManage = !empty($canManageDepartments);
+?>
+<h1><?= e($title) ?></h1>
+<p class="text-muted">
+    <?php if ($canManage): ?>
+    أضف دوائر المؤسسة وعيّن مشرف برنامج لكل دائرة. متاح للمدير فقط.
+    <?php else: ?>
+    الاطلاع على الدوائر المسجّلة ومشرفيها وعدد الأعضاء — قراءة فقط.
+    <?php endif; ?>
+</p>
 
+<?php if ($canManage): ?>
 <div class="card" id="addDeptPanel" hidden>
     <h2>دائرة جديدة</h2>
     <form method="post" action="<?= e(url('/manager/departments/create')) ?>">
@@ -33,11 +43,14 @@
         </div>
     </form>
 </div>
+<?php endif; ?>
 
 <div class="card">
     <div class="card-header-row">
         <h2>الدوائر المسجّلة</h2>
+        <?php if ($canManage): ?>
         <button type="button" class="btn" onclick="toggleAddPanel('addDeptPanel')">+ إضافة</button>
+        <?php endif; ?>
     </div>
     <?php if (empty($departments)): ?>
         <p class="text-muted">لا توجد دوائر بعد.</p>
@@ -49,7 +62,7 @@
                 <th>مشرف البرنامج</th>
                 <th>الأعضاء</th>
                 <th>الوصف</th>
-                <th>إجراء</th>
+                <?php if ($canManage): ?><th>إجراء</th><?php endif; ?>
             </tr>
         </thead>
         <tbody>
@@ -59,6 +72,7 @@
                 <td><?= e($d['supervisor_name'] ?? '—') ?></td>
                 <td><?= (int)($d['member_count'] ?? 0) ?></td>
                 <td><?= e($d['description'] ?? '—') ?></td>
+                <?php if ($canManage): ?>
                 <td class="text-nowrap">
                     <button type="button" class="btn btn-outline" style="padding:0.25rem 0.5rem;font-size:0.85rem"
                             onclick="editDept(<?= (int)$d['id'] ?>, <?= e(json_encode($d['name'], JSON_UNESCAPED_UNICODE)) ?>, <?= e(json_encode($d['description'] ?? '', JSON_UNESCAPED_UNICODE)) ?>, <?= (int)($d['supervisor_id'] ?? 0) ?>)">
@@ -71,6 +85,7 @@
                         <button type="submit" class="btn btn-danger" style="padding:0.25rem 0.5rem;font-size:0.85rem">حذف</button>
                     </form>
                 </td>
+                <?php endif; ?>
             </tr>
         <?php endforeach; ?>
         </tbody>
@@ -78,6 +93,7 @@
     <?php endif; ?>
 </div>
 
+<?php if ($canManage): ?>
 <div class="card" id="editPanel" style="display:none">
     <h2>تعديل دائرة</h2>
     <form method="post" action="<?= e(url('/manager/departments/update')) ?>" id="editForm">
@@ -119,3 +135,4 @@ function editDept(id, name, desc, supervisorId) {
     document.getElementById('editPanel').scrollIntoView({behavior:'smooth'});
 }
 </script>
+<?php endif; ?>

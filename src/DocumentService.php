@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 class DocumentService
 {
+    public const CATEGORIES = [
+        'contract' => 'عقد العمل',
+        'report' => 'تقارير',
+        'identity' => 'هوية / وثائق شخصية',
+        'certificate' => 'شهادات',
+        'other' => 'أخرى',
+    ];
+
     private const ALLOWED = [
         'application/pdf' => 'pdf',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
@@ -28,16 +36,69 @@ class DocumentService
         return $dir;
     }
 
-    public static function listAll(): array
+    public static function canAccess(int $actorId, string $actorRole, int $ownerUserId): bool
+    {
+        if ($actorId === $ownerUserId) {
+            return true;
+        }
+        if (PermissionService::can($actorId, 'manage_employee_documents')
+            || PermissionService::can($actorId, 'view_employee_documents')) {
+            return ScopeService::canViewUser($actorId, $actorRole, $ownerUserId);
+        }
+        if (PermissionService::can($actorId, 'manage_documents')
+            || PermissionService::can($actorId, 'view_documents')) {
+            return ScopeService::canViewUser($actorId, $actorRole, $ownerUserId);
+        }
+
+        return false;
+    }
+
+    public static function canManage(int $actorId, string $actorRole, int $ownerUserId): bool
+    {
+        if ($actorId === $ownerUserId) {
+            return false;
+        }
+        if (PermissionService::can($actorId, 'manage_employee_documents')) {
+            return ScopeService::canViewUser($actorId, $actorRole, $ownerUserId);
+        }
+
+        return PermissionService::can($actorId, 'manage_documents')
+            && ScopeService::canViewUser($actorId, $actorRole, $ownerUserId);
+    }
+
+    /** موظفون لديهم حافظة مستندات (للاختيار) */
+    public static function employeesForHub(int $actorId, string $actorRole): array
+    {
+        if (RoleHelper::isEmployee($actorRole)) {
+            $self = UserService::getById($actorId);
+            return $self ? [$self] : [];
+        }
+        $users = ScopeService::visibleUsers($actorId, $actorRole);
+        return array_values(array_filter($users, static fn (array $u): bool => RoleHelper::isEmployee($u['role'])));
+    }
+
+    public static function listForEmployee(int $ownerUserId): array
     {
         $pdo = Database::getConnection();
-
-        return $pdo->query(
+        $stmt = $pdo->prepare(
             'SELECT d.*, u.name AS uploader_name
              FROM documents d
              JOIN users u ON u.id = d.uploaded_by
-             ORDER BY d.created_at DESC'
-        )->fetchAll();
+             WHERE d.owner_user_id = ?
+             ORDER BY d.category, d.created_at DESC'
+        );
+        $stmt->execute([$ownerUserId]);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function countForEmployee(int $ownerUserId): int
+    {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM documents WHERE owner_user_id = ?');
+        $stmt->execute([$ownerUserId]);
+
+        return (int) $stmt->fetchColumn();
     }
 
     public static function get(int $id): ?array
@@ -49,8 +110,16 @@ class DocumentService
         return $stmt->fetch() ?: null;
     }
 
-    public static function upload(int $userId, string $title, array $file): int
-    {
+    public static function upload(
+        int $uploaderId,
+        int $ownerUserId,
+        string $category,
+        string $title,
+        array $file
+    ): int {
+        if (!isset(self::CATEGORIES[$category])) {
+            throw new InvalidArgumentException('تصنيف المستند غير صالح.');
+        }
         $title = trim($title);
         if ($title === '') {
             throw new InvalidArgumentException('عنوان المستند مطلوب.');
@@ -76,15 +145,18 @@ class DocumentService
 
         $pdo = Database::getConnection();
         $pdo->prepare(
-            'INSERT INTO documents (title, original_filename, stored_filename, mime_type, file_size, uploaded_by)
-             VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO documents
+             (title, original_filename, stored_filename, mime_type, file_size, uploaded_by, owner_user_id, category)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         )->execute([
             $title,
             (string) ($file['name'] ?? $stored),
             $stored,
             $mime,
             (int) ($file['size'] ?? 0),
-            $userId,
+            $uploaderId,
+            $ownerUserId,
+            $category,
         ]);
 
         return (int) $pdo->lastInsertId();
@@ -96,8 +168,9 @@ class DocumentService
         if (!$doc) {
             throw new RuntimeException('المستند غير موجود.');
         }
-        $role = RoleHelper::normalizeRole($actorRole);
-        if ($role !== 'system_admin' && (int) $doc['uploaded_by'] !== $actorId) {
+        $ownerId = (int) ($doc['owner_user_id'] ?? $doc['uploaded_by']);
+        if (!self::canManage($actorId, $actorRole, $ownerId)
+            && !(RoleHelper::isSystemAdmin($actorRole) && (int) $doc['uploaded_by'] === $actorId)) {
             throw new RuntimeException('لا يمكنك حذف هذا المستند.');
         }
 
@@ -112,5 +185,10 @@ class DocumentService
     public static function filePath(array $doc): string
     {
         return self::storageDir() . DIRECTORY_SEPARATOR . $doc['stored_filename'];
+    }
+
+    public static function categoryLabel(string $code): string
+    {
+        return self::CATEGORIES[$code] ?? $code;
     }
 }

@@ -15,6 +15,7 @@ class WorkScheduleService
                 'late_grace_minutes' => 15,
                 'work_days' => '0,1,2,3,4',
                 'report_submission_days' => 5,
+                'contract_freeze_grace_days' => 30,
             ];
         }
         return $row;
@@ -26,7 +27,8 @@ class WorkScheduleService
         int $graceMinutes,
         string $workDays,
         int $updatedBy,
-        ?int $reportSubmissionDays = null
+        ?int $reportSubmissionDays = null,
+        ?int $contractFreezeGraceDays = null
     ): void {
         if (!preg_match('/^\d{2}:\d{2}$/', $startTime) || !preg_match('/^\d{2}:\d{2}$/', $endTime)) {
             throw new InvalidArgumentException('صيغة الوقت غير صحيحة (HH:MM).');
@@ -38,16 +40,18 @@ class WorkScheduleService
         $existing = $pdo->query('SELECT id FROM work_schedule ORDER BY id DESC LIMIT 1')->fetch();
         $reportDays = $reportSubmissionDays ?? (int) (self::get()['report_submission_days'] ?? 5);
         $reportDays = max(1, min(31, $reportDays));
+        $freezeDays = $contractFreezeGraceDays ?? (int) (self::get()['contract_freeze_grace_days'] ?? 30);
+        $freezeDays = max(0, min(365, $freezeDays));
         if ($existing) {
             $pdo->prepare(
                 'UPDATE work_schedule SET work_start_time=?, work_end_time=?, late_grace_minutes=?,
-                 work_days=?, report_submission_days=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
-            )->execute([$startTime, $endTime, $graceMinutes, $workDays, $reportDays, $updatedBy, $existing['id']]);
+                 work_days=?, report_submission_days=?, contract_freeze_grace_days=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+            )->execute([$startTime, $endTime, $graceMinutes, $workDays, $reportDays, $freezeDays, $updatedBy, $existing['id']]);
         } else {
             $pdo->prepare(
-                'INSERT INTO work_schedule (work_start_time, work_end_time, late_grace_minutes, work_days, report_submission_days, updated_by)
-                 VALUES (?, ?, ?, ?, ?, ?)'
-            )->execute([$startTime, $endTime, $graceMinutes, $workDays, $reportDays, $updatedBy]);
+                'INSERT INTO work_schedule (work_start_time, work_end_time, late_grace_minutes, work_days, report_submission_days, contract_freeze_grace_days, updated_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$startTime, $endTime, $graceMinutes, $workDays, $reportDays, $freezeDays, $updatedBy]);
         }
     }
 

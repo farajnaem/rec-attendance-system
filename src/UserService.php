@@ -62,7 +62,8 @@ class UserService
         string $timezone,
         ?int $managerId,
         ?int $departmentId = null,
-        ?array $permissions = null
+        ?array $permissions = null,
+        ?string $contractEndDate = null
     ): int {
         $name = trim($name);
         $email = trim(strtolower($email));
@@ -88,12 +89,22 @@ class UserService
             throw new RuntimeException('البريد الإلكتروني مستخدم مسبقاً.');
         }
 
+        $contractVal = null;
+        if ($role === 'employee' && $contractEndDate !== null) {
+            $contractVal = trim($contractEndDate);
+            if ($contractVal === '') {
+                $contractVal = null;
+            } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $contractVal)) {
+                throw new InvalidArgumentException('تاريخ انتهاء العقد غير صالح.');
+            }
+        }
+
         $hash = password_hash($password, PASSWORD_BCRYPT);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
-                'INSERT INTO users (name, email, password_hash, role, timezone, manager_id)
-                 VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO users (name, email, password_hash, role, timezone, manager_id, contract_end_date)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $name,
@@ -102,6 +113,7 @@ class UserService
                 $role,
                 $timezone,
                 $role === 'employee' ? $managerId : null,
+                $contractVal,
             ]);
 
             $userId = (int) $pdo->lastInsertId();
@@ -149,7 +161,9 @@ class UserService
         ?string $newPassword,
         int $actorId,
         string $actorRole,
-        bool $canChangeRole
+        bool $canChangeRole,
+        ?string $contractEndDate = null,
+        bool $canSetContract = false
     ): void {
         self::assertCanEdit($userId, $actorId, $actorRole);
 
@@ -207,6 +221,17 @@ class UserService
             $current = DepartmentService::currentForUser($userId);
             if (!$current || (int) $current['id'] !== $departmentId) {
                 DepartmentService::assignUser($userId, $departmentId, $actorId);
+            }
+        }
+
+        if ($canSetContract && PermissionService::hasFullUserManagement($actorId)) {
+            $contractVal = trim((string) $contractEndDate);
+            if ($contractVal === '') {
+                $pdo->prepare('UPDATE users SET contract_end_date = NULL WHERE id = ?')->execute([$userId]);
+            } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $contractVal)) {
+                throw new InvalidArgumentException('تاريخ انتهاء العقد غير صالح.');
+            } else {
+                $pdo->prepare('UPDATE users SET contract_end_date = ? WHERE id = ?')->execute([$contractVal, $userId]);
             }
         }
 

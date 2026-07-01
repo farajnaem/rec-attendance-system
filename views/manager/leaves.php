@@ -24,8 +24,43 @@ $statusLabels = [
     <button type="submit" class="btn">تصفية</button>
 </form>
 
-<div class="card">
+<?php if (!empty($pendingBreaks) && Auth::can('approve_work_breaks')): ?>
+<div class="card" style="margin-bottom:1rem">
+    <h2>مغادرات أثناء العمل — بانتظار الاعتماد</h2>
     <table>
+        <thead>
+            <tr><th>الموظف</th><th>التاريخ</th><th>خروج</th><th>عودة</th><th>معطي الإذن</th><th>ملاحظات</th><th>إجراء</th></tr>
+        </thead>
+        <tbody>
+        <?php foreach ($pendingBreaks as $wb): ?>
+        <tr>
+            <td><?= e($wb['employee_name']) ?></td>
+            <td><?= e($wb['work_date']) ?></td>
+            <td><?= e($wb['exit_time']) ?></td>
+            <td><?= e($wb['return_time']) ?></td>
+            <td><?= e($wb['authorized_by_name']) ?></td>
+            <td><?= e($wb['notes'] ?? '—') ?></td>
+            <td class="text-nowrap">
+                <form method="post" action="<?= e(url('/manager/work-break/approve')) ?>" style="display:inline">
+                    <?= Csrf::field() ?>
+                    <input type="hidden" name="break_id" value="<?= (int) $wb['id'] ?>">
+                    <button type="submit" class="btn btn-success" style="padding:0.25rem 0.5rem;font-size:0.85rem">موافقة</button>
+                </form>
+                <form method="post" action="<?= e(url('/manager/work-break/reject')) ?>" style="display:inline">
+                    <?= Csrf::field() ?>
+                    <input type="hidden" name="break_id" value="<?= (int) $wb['id'] ?>">
+                    <button type="submit" class="btn btn-danger" style="padding:0.25rem 0.5rem;font-size:0.85rem">رفض</button>
+                </form>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+<?php endif; ?>
+
+<div class="card">
+    <h2>طلبات الإجازة</h2>
         <thead>
             <tr>
                 <th>الموظف</th>

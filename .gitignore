@@ -9,6 +9,7 @@ php.local.ini
 # تخزين التطبيق
 storage/*
 !storage/.gitkeep
+storage/documents/
 
 # نظام
 .DS_Store
