@@ -1193,8 +1193,30 @@ try {
             }
             $user = UserService::getById($userId);
             $profile = JobDescriptionService::getProfile($userId);
-            $tasks = JobDescriptionService::tasksForUser($userId);
-            view('manager/job_description_edit', compact('user', 'profile', 'tasks'));
+            $dutiesBody = JobDescriptionService::getDutiesBodyText($userId);
+            view('manager/job_description_edit', compact('user', 'profile', 'dutiesBody'));
+        })(),
+
+        $route === '/manager/job-description/save' && $method === 'POST' => (function () {
+            Auth::requirePermission('manage_job_description');
+            if (!Csrf::verify($_POST['csrf_token'] ?? null)) {
+                flash('error', 'انتهت صلاحية النموذج.');
+                redirect('/manager/job-description');
+            }
+            $userId = (int) ($_POST['user_id'] ?? 0);
+            try {
+                JobDescriptionService::assertCanManageUser(Auth::id(), Auth::role(), $userId);
+                JobDescriptionService::saveProfile(
+                    $userId,
+                    $_POST['job_title'] ?? '',
+                    $_POST['duties_body'] ?? '',
+                    Auth::id()
+                );
+                flash('success', 'تم حفظ التوصيف الوظيفي.');
+            } catch (Throwable $e) {
+                flash('error', $e->getMessage());
+            }
+            redirect('/manager/job-description/edit?user_id=' . $userId);
         })(),
 
         $route === '/manager/job-description/title' && $method === 'POST' => (function () {

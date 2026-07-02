@@ -40,6 +40,7 @@ class JobDescriptionService
             $stmt = $pdo->prepare(
                 "SELECT u.id, u.name, u.email, u.role,
                         p.job_title,
+                        p.duties_body,
                         (SELECT COUNT(*) FROM job_description_duties jd
                          WHERE jd.user_id = u.id AND jd.is_active = 1) AS duty_count
                  FROM users u
@@ -55,6 +56,7 @@ class JobDescriptionService
         return $pdo->query(
             'SELECT u.id, u.name, u.email, u.role,
                     p.job_title,
+                    p.duties_body,
                     (SELECT COUNT(*) FROM job_description_duties jd
                      WHERE jd.user_id = u.id AND jd.is_active = 1) AS duty_count
              FROM users u
@@ -73,6 +75,32 @@ class JobDescriptionService
         return $row ?: null;
     }
 
+    public static function getDutiesBodyText(int $userId): string
+    {
+        $profile = self::getProfile($userId);
+        if ($profile && trim((string) ($profile['duties_body'] ?? '')) !== '') {
+            return (string) $profile['duties_body'];
+        }
+
+        $tasks = self::tasksForUser($userId);
+        if ($tasks === []) {
+            return '';
+        }
+
+        return implode("\n", array_map(static fn (array $t): string => trim((string) $t['title']), $tasks));
+    }
+
+    public static function hasDutiesContent(int $userId): bool
+    {
+        return trim(self::getDutiesBodyText($userId)) !== '';
+    }
+
+    public static function saveProfile(int $userId, string $jobTitle, string $dutiesBody, int $updatedBy): void
+    {
+        self::setJobTitle($userId, $jobTitle, $updatedBy);
+        self::setDutiesBody($userId, $dutiesBody, $updatedBy);
+    }
+
     public static function setJobTitle(int $userId, string $jobTitle, int $updatedBy): void
     {
         $jobTitle = trim($jobTitle);
@@ -88,17 +116,53 @@ class JobDescriptionService
             )->execute([$jobTitle, $updatedBy, $userId]);
         } else {
             $pdo->prepare(
-                'INSERT INTO job_description_profiles (user_id, job_title, updated_by) VALUES (?, ?, ?)'
-            )->execute([$userId, $jobTitle, $updatedBy]);
+                'INSERT INTO job_description_profiles (user_id, job_title, duties_body, updated_by) VALUES (?, ?, ?, ?)'
+            )->execute([$userId, $jobTitle, '', $updatedBy]);
         }
     }
 
-    /** المسمى الوظيفي + المهام الفرعية للعرض عند الموظف */
+    public static function setDutiesBody(int $userId, string $dutiesBody, int $updatedBy): void
+    {
+        $dutiesBody = trim(str_replace(["\r\n", "\r"], "\n", $dutiesBody));
+        $pdo = Database::getConnection();
+        $existing = self::getProfile($userId);
+        if ($existing) {
+            $pdo->prepare(
+                'UPDATE job_description_profiles SET duties_body = ?, updated_by = ? WHERE user_id = ?'
+            )->execute([$dutiesBody, $updatedBy, $userId]);
+        } else {
+            throw new InvalidArgumentException('احفظ المسمى الوظيفي أولاً.');
+        }
+
+        $pdo->prepare('UPDATE job_description_duties SET is_active = 0 WHERE user_id = ?')->execute([$userId]);
+        if ($dutiesBody === '') {
+            return;
+        }
+
+        $lines = preg_split('/\n+/', $dutiesBody) ?: [];
+        $sort = 1;
+        $insert = $pdo->prepare(
+            'INSERT INTO job_description_duties (user_id, title, description, sort_order, created_by, is_active)
+             VALUES (?, ?, NULL, ?, ?, 1)'
+        );
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            $insert->execute([$userId, $line, $sort++, $updatedBy]);
+        }
+    }
+
+    /** المسمى الوظيفي + الوصف/التبعية للعرض عند الموظف */
     public static function fullForUser(int $userId): array
     {
         $profile = self::getProfile($userId);
+        $body = self::getDutiesBodyText($userId);
+
         return [
             'job_title' => $profile['job_title'] ?? null,
+            'duties_body' => $body,
             'tasks' => self::tasksForUser($userId),
         ];
     }
@@ -125,41 +189,28 @@ class JobDescriptionService
         return $row ?: null;
     }
 
+    /** @deprecated استخدم saveProfile */
     public static function createTask(int $userId, string $title, int $createdBy): int
     {
-        $title = trim($title);
-        if ($title === '') {
-            throw new InvalidArgumentException('عنوان المهمة الفرعية مطلوب.');
-        }
+        $body = self::getDutiesBodyText($userId);
+        $body = trim($body . "\n" . trim($title));
+        self::setDutiesBody($userId, $body, $createdBy);
 
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM job_description_duties WHERE user_id = ?');
-        $stmt->execute([$userId]);
-        $sort = (int) $stmt->fetchColumn();
-
-        $pdo->prepare(
-            'INSERT INTO job_description_duties (user_id, title, description, sort_order, created_by, is_active)
-             VALUES (?, ?, NULL, ?, ?, 1)'
-        )->execute([$userId, $title, $sort, $createdBy]);
-
-        return (int) $pdo->lastInsertId();
+        return 0;
     }
 
+    /** @deprecated */
     public static function updateTask(int $id, string $title): void
     {
         $duty = self::getById($id);
         if (!$duty || (int) $duty['is_active'] !== 1) {
             throw new RuntimeException('المهمة غير موجودة.');
         }
-        $title = trim($title);
-        if ($title === '') {
-            throw new InvalidArgumentException('عنوان المهمة الفرعية مطلوب.');
-        }
-
         $pdo = Database::getConnection();
-        $pdo->prepare('UPDATE job_description_duties SET title = ? WHERE id = ?')->execute([$title, $id]);
+        $pdo->prepare('UPDATE job_description_duties SET title = ? WHERE id = ?')->execute([trim($title), $id]);
     }
 
+    /** @deprecated */
     public static function deleteTask(int $id): void
     {
         $duty = self::getById($id);

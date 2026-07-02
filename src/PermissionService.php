@@ -63,19 +63,19 @@ class PermissionService
         ],
         'manage_documents' => [
             'label' => 'رفع المستندات',
-            'defaults' => ['admin_assistant'],
+            'defaults' => self::ALL_ROLES,
         ],
         'view_documents' => [
             'label' => 'تحميل المستندات (عام)',
-            'defaults' => ['admin_assistant'],
+            'defaults' => self::ALL_ROLES,
         ],
         'view_employee_documents' => [
             'label' => 'الاطلاع على حافظة مستندات الموظف',
-            'defaults' => ['admin_assistant', 'program_supervisor', 'director'],
+            'defaults' => self::ALL_ROLES,
         ],
         'manage_employee_documents' => [
             'label' => 'رفع مستندات في حافظة الموظف',
-            'defaults' => ['admin_assistant', 'director'],
+            'defaults' => self::ALL_ROLES,
         ],
         'view_narrative_reports' => [
             'label' => 'مشاهدة التقارير السردية للموظفين',

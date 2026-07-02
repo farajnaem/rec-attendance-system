@@ -19,6 +19,7 @@ class MigrationRunner
     private const PHASE_13 = 'phase_13_borrow_users_tab';
     private const PHASE_14 = 'phase_14_supervisor_view_departments';
     private const PHASE_15 = 'phase_15_contracts_docs_breaks';
+    private const PHASE_16 = 'phase_16_duties_body_doc_defaults';
 
     public static function ensureLatest(): void
     {
@@ -84,6 +85,10 @@ class MigrationRunner
         if (!self::isApplied($pdo, self::PHASE_15)) {
             self::runPhase15($pdo);
             self::markApplied($pdo, self::PHASE_15);
+        }
+        if (!self::isApplied($pdo, self::PHASE_16)) {
+            self::runPhase16($pdo);
+            self::markApplied($pdo, self::PHASE_16);
         }
     }
 
@@ -928,6 +933,62 @@ class MigrationRunner
             ContractService::enforceAllExpired();
         } catch (Throwable $e) {
             error_log('ContractService::enforceAllExpired during migration: ' . $e->getMessage());
+        }
+    }
+
+    private static function runPhase16(PDO $pdo): void
+    {
+        self::addColumnIfMissing(
+            $pdo,
+            'job_description_profiles',
+            'duties_body',
+            'TEXT NULL'
+        );
+
+        $users = $pdo->query(
+            'SELECT DISTINCT user_id FROM job_description_duties WHERE is_active = 1'
+        )->fetchAll();
+        foreach ($users as $row) {
+            $uid = (int) $row['user_id'];
+            $profile = $pdo->prepare('SELECT duties_body FROM job_description_profiles WHERE user_id = ?');
+            $profile->execute([$uid]);
+            $existing = $profile->fetch();
+            if ($existing && trim((string) ($existing['duties_body'] ?? '')) !== '') {
+                continue;
+            }
+            $lines = $pdo->prepare(
+                'SELECT title FROM job_description_duties WHERE user_id = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC'
+            );
+            $lines->execute([$uid]);
+            $text = implode("\n", array_map(
+                static fn (array $r): string => trim((string) $r['title']),
+                $lines->fetchAll()
+            ));
+            $text = trim($text);
+            if ($text === '') {
+                continue;
+            }
+            if ($existing) {
+                $pdo->prepare('UPDATE job_description_profiles SET duties_body = ? WHERE user_id = ?')
+                    ->execute([$text, $uid]);
+            } else {
+                $pdo->prepare(
+                    'INSERT INTO job_description_profiles (user_id, job_title, duties_body, updated_by) VALUES (?, ?, ?, NULL)'
+                )->execute([$uid, 'غير محدد', $text]);
+            }
+        }
+
+        $docPerms = [
+            'view_documents',
+            'manage_documents',
+            'view_employee_documents',
+            'manage_employee_documents',
+        ];
+        unset($docPerms);
+
+        $allUsers = $pdo->query('SELECT id, role FROM users')->fetchAll();
+        foreach ($allUsers as $user) {
+            PermissionService::syncMissingDefaults((int) $user['id'], (string) $user['role']);
         }
     }
 }

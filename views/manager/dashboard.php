@@ -90,7 +90,7 @@
     <?php if (Auth::can('manage_job_description')): ?>
     <a href="<?= e(url('/manager/job-description')) ?>" class="card link-card">
         <h3>التوصيف الوظيفي</h3>
-        <p class="text-muted">المسمى والمهام الفرعية</p>
+        <p class="text-muted">المسمى والوصف الوظيفي / التبعية</p>
     </a>
     <?php endif; ?>
     <?php if (Auth::can('manage_daily_tasks')): ?>

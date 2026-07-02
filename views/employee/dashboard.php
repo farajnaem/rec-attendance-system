@@ -240,9 +240,9 @@
     <h2>التوصيف الوظيفي</h2>
     <?php
     $jobTitle = $jobDescription['job_title'] ?? null;
-    $jobTasks = $jobDescription['tasks'] ?? [];
+    $dutiesBody = trim((string) ($jobDescription['duties_body'] ?? ''));
     ?>
-    <?php if (!$jobTitle && empty($jobTasks)): ?>
+    <?php if (!$jobTitle && $dutiesBody === ''): ?>
     <p class="text-muted">لم يُدخل التوصيف الوظيفي بعد. راجع المدير أو المساعد الإداري.</p>
     <?php else: ?>
     <?php if ($jobTitle): ?>
@@ -250,13 +250,9 @@
         <strong>المسمى الوظيفي:</strong> <?= e($jobTitle) ?>
     </p>
     <?php endif; ?>
-    <?php if (!empty($jobTasks)): ?>
-    <h3 style="font-size:1rem;margin-bottom:0.5rem">المهام الفرعية</h3>
-    <ul style="margin:0;padding-right:1.25rem;line-height:1.8">
-        <?php foreach ($jobTasks as $t): ?>
-        <li><?= e($t['title']) ?></li>
-        <?php endforeach; ?>
-    </ul>
+    <?php if ($dutiesBody !== ''): ?>
+    <h3 style="font-size:1rem;margin-bottom:0.5rem">الوصف الوظيفي / التبعية الوظيفية</h3>
+    <div class="job-duties-display"><?= nl2br(e($dutiesBody)) ?></div>
     <?php endif; ?>
     <?php endif; ?>
 </div>

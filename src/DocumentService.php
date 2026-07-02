@@ -56,7 +56,7 @@ class DocumentService
     public static function canManage(int $actorId, string $actorRole, int $ownerUserId): bool
     {
         if ($actorId === $ownerUserId) {
-            return false;
+            return PermissionService::can($actorId, 'manage_employee_documents');
         }
         if (PermissionService::can($actorId, 'manage_employee_documents')) {
             return ScopeService::canViewUser($actorId, $actorRole, $ownerUserId);
