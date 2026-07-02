@@ -588,34 +588,16 @@ textarea.form-control {
 .card > table .table-actions-col-first {
     right: 0;
     left: auto;
-    min-width: 11rem;
-    max-width: 16rem;
+    min-width: 6.5rem;
+    max-width: 8rem;
     box-shadow: -4px 0 10px -6px rgba(15, 23, 42, 0.12);
 }
 
-.user-actions-bar {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.35rem;
-    min-width: 9.5rem;
-}
-
-.user-actions-bar .btn-sm {
-    font-size: 0.78rem;
-    padding: 0.28rem 0.55rem;
-    line-height: 1.35;
-    white-space: nowrap;
-    text-align: center;
-}
-
-.user-actions-inline-form {
-    margin: 0;
-    display: block;
-}
-
-.user-actions-inline-form .btn {
+.table-wrap .table-actions-col-first .row-actions-trigger,
+.card > table .table-actions-col-first .row-actions-trigger {
     width: 100%;
+    justify-content: center;
+    white-space: nowrap;
 }
 
 .job-duties-editor {

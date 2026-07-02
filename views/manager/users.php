@@ -156,37 +156,43 @@
             <tr data-search="<?= e(mb_strtolower($u['name'] . ' ' . $u['email'])) ?>">
                 <td class="table-actions-col table-actions-col-first">
                     <?php if ($showActions): ?>
-                    <div class="user-actions-bar">
-                        <?php if ($canEditRow || $canEditSelf): ?>
-                        <a class="btn btn-outline btn-sm" href="<?= e(url('/manager/users/edit?id=' . (int)$u['id'])) ?>" title="تعديل">تعديل</a>
-                        <?php endif; ?>
-                        <?php if (Auth::can('manage_job_description') && RoleHelper::isEmployee($u['role'])): ?>
-                        <a class="btn btn-outline btn-sm" href="<?= e(url('/manager/job-description/edit?user_id=' . (int)$u['id'])) ?>" title="التوصيف الوظيفي">توصيف</a>
-                        <?php endif; ?>
-                        <?php if (RoleHelper::isEmployee($u['role']) && (Auth::can('view_employee_documents') || Auth::can('manage_employee_documents'))): ?>
-                        <a class="btn btn-outline btn-sm" href="<?= e(url('/documents/employee?id=' . (int)$u['id'])) ?>" title="حافظة المستندات">مستندات</a>
-                        <?php endif; ?>
-                        <?php if (!empty($canEditPermissions) && !empty($canManageAllUsers) && (int)$u['id'] !== Auth::id()): ?>
-                        <a class="btn btn-outline btn-sm" href="<?= e(url('/manager/users/permissions?id=' . (int)$u['id'])) ?>" title="صلاحيات">صلاحيات</a>
-                        <?php endif; ?>
-                        <?php if (!empty($canManageAllUsers) && (int)$u['id'] !== Auth::id()): ?>
-                        <form method="post" action="<?= e(url('/manager/users/toggle')) ?>" class="user-actions-inline-form">
-                            <?= Csrf::field() ?>
-                            <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
-                            <button type="submit" class="btn btn-outline btn-sm" title="<?= (int)$u['is_active'] === 1 ? 'تعطيل' : 'تفعيل' ?>">
-                                <?= (int)$u['is_active'] === 1 ? 'تعطيل' : 'تفعيل' ?>
-                            </button>
-                        </form>
-                        <?php if ($isSystemAdmin): ?>
-                        <form method="post" action="<?= e(url('/manager/users/delete')) ?>" class="user-actions-inline-form"
-                              data-confirm="حذف <?= e($u['name']) ?>؟">
-                            <?= Csrf::field() ?>
-                            <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
-                            <button type="submit" class="btn btn-danger btn-sm" title="حذف">حذف</button>
-                        </form>
-                        <?php endif; ?>
-                        <?php endif; ?>
-                    </div>
+                    <details class="row-actions-menu">
+                        <summary class="row-actions-trigger" aria-label="إجراءات <?= e($u['name']) ?>">
+                            إجراءات
+                            <span aria-hidden="true">▾</span>
+                        </summary>
+                        <div class="row-actions-panel">
+                            <?php if ($canEditRow || $canEditSelf): ?>
+                            <a class="row-actions-item" href="<?= e(url('/manager/users/edit?id=' . (int)$u['id'])) ?>">تعديل البيانات</a>
+                            <?php endif; ?>
+                            <?php if (Auth::can('manage_job_description') && RoleHelper::isEmployee($u['role'])): ?>
+                            <a class="row-actions-item" href="<?= e(url('/manager/job-description/edit?user_id=' . (int)$u['id'])) ?>">التوصيف الوظيفي</a>
+                            <?php endif; ?>
+                            <?php if (RoleHelper::isEmployee($u['role']) && (Auth::can('view_employee_documents') || Auth::can('manage_employee_documents'))): ?>
+                            <a class="row-actions-item" href="<?= e(url('/documents/employee?id=' . (int)$u['id'])) ?>">حافظة المستندات</a>
+                            <?php endif; ?>
+                            <?php if (!empty($canEditPermissions) && !empty($canManageAllUsers) && (int)$u['id'] !== Auth::id()): ?>
+                            <a class="row-actions-item" href="<?= e(url('/manager/users/permissions?id=' . (int)$u['id'])) ?>">الصلاحيات</a>
+                            <?php endif; ?>
+                            <?php if (!empty($canManageAllUsers) && (int)$u['id'] !== Auth::id()): ?>
+                            <form method="post" action="<?= e(url('/manager/users/toggle')) ?>" class="row-actions-form">
+                                <?= Csrf::field() ?>
+                                <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                                <button type="submit" class="row-actions-item">
+                                    <?= (int)$u['is_active'] === 1 ? 'تعطيل الحساب' : 'تفعيل الحساب' ?>
+                                </button>
+                            </form>
+                            <?php if ($isSystemAdmin): ?>
+                            <form method="post" action="<?= e(url('/manager/users/delete')) ?>" class="row-actions-form"
+                                  data-confirm="حذف <?= e($u['name']) ?>؟ لا يمكن التراجع.">
+                                <?= Csrf::field() ?>
+                                <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                                <button type="submit" class="row-actions-item row-actions-item--danger">حذف الموظف</button>
+                            </form>
+                            <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                    </details>
                     <?php else: ?>
                     <span class="text-muted">—</span>
                     <?php endif; ?>
